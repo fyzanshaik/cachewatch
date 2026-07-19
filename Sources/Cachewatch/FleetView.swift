@@ -98,6 +98,28 @@ struct FleetView: View {
     }
 }
 
+/// Thin capacity bar used for quota, context, and cache countdowns.
+private struct MiniBar: View {
+    let fraction: Double
+    let color: Color
+    var width: CGFloat = 44
+
+    var body: some View {
+        Capsule()
+            .fill(.quaternary)
+            .frame(width: width, height: 4)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(3, width * min(1, max(0, fraction))))
+            }
+    }
+}
+
+private func quotaColor(_ used: Double) -> Color {
+    used >= 80 ? .red : used >= 60 ? .orange : .green
+}
+
 private struct QuotaBadge: View {
     let label: String
     let window: StatuslinePayload.RateLimitWindow?
@@ -105,11 +127,12 @@ private struct QuotaBadge: View {
 
     var body: some View {
         if let window, let used = window.usedPercentage {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Text(label).foregroundStyle(.secondary)
                 if window.isExpired(at: now) {
                     Text("reset").foregroundStyle(.green)
                 } else {
+                    MiniBar(fraction: used / 100, color: quotaColor(used))
                     Text("\(Int(used))%")
                         .foregroundStyle(used >= 80 ? .red : used >= 60 ? .orange : .primary)
                         .monospacedDigit()
@@ -176,7 +199,17 @@ private struct SessionRow: View {
             }
             HStack(spacing: 10) {
                 Text(Format.model(session.model))
-                Text("ctx \(Format.tokens(session.contextTokens))")
+                HStack(spacing: 4) {
+                    Text("ctx \(Format.tokens(session.contextTokens))")
+                    if let fraction = contextFraction {
+                        MiniBar(
+                            fraction: fraction,
+                            color: fraction >= 0.9 ? .red : fraction >= 0.75 ? .orange : .secondary.opacity(0.6),
+                            width: 30
+                        )
+                        .help("Context window \(Int(fraction * 100))% full — auto-compact approaches at ~95%")
+                    }
+                }
                 Text(Format.memory(session.memoryBytes))
                 if let cost = session.costUSD, cost > 0 {
                     Text(cost, format: .currency(code: "USD"))
@@ -225,6 +258,12 @@ private struct SessionRow: View {
         }
     }
 
+    /// Statusline-reported fill when available, else tokens against the 200k default.
+    private var contextFraction: Double? {
+        if let pct = session.contextUsedPercentage { return pct / 100 }
+        return session.contextTokens.map { min(1, Double($0) / 200_000) }
+    }
+
     private var statusColor: Color {
         switch session.status {
         case .busy: .green
@@ -238,10 +277,19 @@ private struct SessionRow: View {
     private var cacheBadge: some View {
         switch session.cacheState(at: now) {
         case .warm(let expiresAt):
-            Text("warm \(Format.countdown(expiresAt.timeIntervalSince(now)))")
-                .font(.caption)
-                .monospacedDigit()
-                .foregroundStyle(expiresAt.timeIntervalSince(now) < 120 ? .orange : .green)
+            let remaining = expiresAt.timeIntervalSince(now)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("warm \(Format.countdown(remaining))")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(remaining < 120 ? .orange : .green)
+                if let ttl = session.cacheTTL {
+                    MiniBar(
+                        fraction: remaining / ttl.duration,
+                        color: remaining < 120 ? .orange : .green
+                    )
+                }
+            }
         case .cold:
             HStack(spacing: 4) {
                 Text("cold")
