@@ -103,8 +103,14 @@ public struct FleetReducer: Sendable {
     private var cumulativeTurnCostUSD = 0.0
     private var calibration: QuotaCalibrator
 
-    public init(calibration: QuotaCalibrator = QuotaCalibrator()) {
+    public init(
+        calibration: QuotaCalibrator = QuotaCalibrator(),
+        rateLimits: StatuslinePayload.RateLimits? = nil,
+        rateLimitsAsOf: Date? = nil
+    ) {
         self.calibration = calibration
+        self.rateLimits = rateLimits
+        self.rateLimitsAsOf = rateLimitsAsOf
     }
 
     public mutating func apply(_ event: CollectorEvent) {

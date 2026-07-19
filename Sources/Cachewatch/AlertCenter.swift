@@ -18,6 +18,12 @@ final class AlertCenter {
         state.calibration ?? QuotaCalibrator()
     }
 
+    /// Last-seen quota, so the display survives restarts (shown with its age).
+    var storedRateLimits: (StatuslinePayload.RateLimits, Date)? {
+        guard let limits = state.lastRateLimits, let asOf = state.lastRateLimitsAsOf else { return nil }
+        return (limits, asOf)
+    }
+
     func deliverTest() {
         deliver(Alert(
             key: "test",

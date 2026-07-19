@@ -48,7 +48,11 @@ final class FleetModel {
     let alertCenter = AlertCenter()
 
     init() {
-        collector = Collector(calibration: alertCenter.storedCalibration)
+        collector = Collector(
+            calibration: alertCenter.storedCalibration,
+            rateLimits: alertCenter.storedRateLimits?.0,
+            rateLimitsAsOf: alertCenter.storedRateLimits?.1
+        )
         Task {
             await collector.start()
             for await snapshot in await collector.snapshots {
