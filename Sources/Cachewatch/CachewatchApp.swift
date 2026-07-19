@@ -46,6 +46,7 @@ final class FleetModel {
     private(set) var fleet = FleetSnapshot()
     private let collector: Collector
     let alertCenter = AlertCenter()
+    private let notchSurface = NotchSurface()
 
     init() {
         collector = Collector(
@@ -60,5 +61,10 @@ final class FleetModel {
             }
         }
         alertCenter.run { [weak self] in self?.fleet ?? FleetSnapshot() }
+        Task { [weak self] in
+            guard let self else { return }
+            self.notchSurface.attach(model: self)
+            self.alertCenter.notch = self.notchSurface
+        }
     }
 }

@@ -67,32 +67,32 @@ struct FleetView: View {
 
     @ViewBuilder
     private func header(now: Date) -> some View {
-        HStack {
-            Text("\(model.fleet.sessions.count) session\(model.fleet.sessions.count == 1 ? "" : "s")")
-                .font(.headline)
-            Spacer()
-            if let limits = model.fleet.rateLimits {
-                VStack(alignment: .trailing, spacing: 1) {
-                    HStack(spacing: 8) {
-                        QuotaBadge(label: "5h", window: limits.fiveHour, now: now)
-                        QuotaBadge(label: "7d", window: limits.sevenDay, now: now)
-                    }
-                    if let asOf = model.fleet.rateLimitsAsOf, now.timeIntervalSince(asOf) > 120 {
-                        Text("as of \(Format.age(since: asOf, now: now)) ago")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    if model.fleet.calibration.dollarsPerPercent == nil {
-                        Text("learning quota \(Int(model.fleet.calibration.progress * 100))%")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                            .help("Fitting how tokens map to your Plan's 5h window from observed burn; cold-session estimates switch from dollars to % when done")
-                    }
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(model.fleet.sessions.count) session\(model.fleet.sessions.count == 1 ? "" : "s")")
+                    .font(.headline)
+                Spacer()
+                if model.fleet.rateLimits == nil {
+                    Text("quota: waiting for statusline data")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                } else if let asOf = model.fleet.rateLimitsAsOf, now.timeIntervalSince(asOf) > 120 {
+                    Text("quota as of \(Format.age(since: asOf, now: now)) ago")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                } else if model.fleet.calibration.dollarsPerPercent == nil {
+                    Text("learning quota \(Int(model.fleet.calibration.progress * 100))%")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .help("Fitting how tokens map to your Plan's 5h window from observed burn; cold-session estimates switch from dollars to % when done")
                 }
-            } else {
-                Text("quota: waiting for statusline data")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            }
+            if let limits = model.fleet.rateLimits {
+                HStack(spacing: 20) {
+                    QuotaBadge(label: "5h", window: limits.fiveHour, now: now)
+                    QuotaBadge(label: "7d", window: limits.sevenDay, now: now)
+                    Spacer()
+                }
             }
         }
     }

@@ -7,7 +7,7 @@ import CollectorEngine
 final class AlertCenter {
     private let store = StateStore()
     private var state: AppState
-    private let notch = NotchNotifier()
+    weak var notch: NotchSurface?
 
     init() {
         state = store.load()
@@ -66,7 +66,7 @@ final class AlertCenter {
     }
 
     private func deliver(_ alert: Alert) {
-        if notch.canShow {
+        if let notch, notch.canShow {
             notch.show(alert)
         } else {
             deliverOSAScript(alert)
