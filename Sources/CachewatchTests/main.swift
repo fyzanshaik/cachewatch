@@ -96,6 +96,8 @@ runSourceTests(t)
 
 runAlertTests(t)
 runQuotaTests(t)
+runPricingTests(t)
+runCacheMissTests(t)
 
 // MARK: - Integration
 

@@ -19,12 +19,33 @@ public struct AlertConfig: Sendable, Equatable, Codable {
         public var minMemoryBytes: UInt64 = 500_000_000
     }
 
+    public struct CacheMiss: Sendable, Equatable, Codable {
+        public var enabled = true
+    }
+
     public var notificationsEnabled = true
     public var quota = Quota()
     public var cacheExpiry = CacheExpiry()
     public var longIdle = LongIdle()
+    public var cacheMiss = CacheMiss()
 
     public static let `default` = AlertConfig()
+
+    public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case notificationsEnabled, quota, cacheExpiry, longIdle, cacheMiss
+    }
+
+    // Tolerant of state.json written before a rule existed: missing sections default.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
+        quota = try c.decodeIfPresent(Quota.self, forKey: .quota) ?? Quota()
+        cacheExpiry = try c.decodeIfPresent(CacheExpiry.self, forKey: .cacheExpiry) ?? CacheExpiry()
+        longIdle = try c.decodeIfPresent(LongIdle.self, forKey: .longIdle) ?? LongIdle()
+        cacheMiss = try c.decodeIfPresent(CacheMiss.self, forKey: .cacheMiss) ?? CacheMiss()
+    }
 }
 
 public struct Alert: Sendable, Equatable {
@@ -51,6 +72,9 @@ public enum AlertEngine {
         }
         if config.longIdle.enabled {
             alerts += longIdleAlerts(fleet: fleet, config: config.longIdle, now: now)
+        }
+        if config.cacheMiss.enabled {
+            alerts += cacheMissAlerts(fleet: fleet)
         }
         return alerts.filter { !alreadyFired.contains($0.key) }
     }
@@ -85,6 +109,17 @@ public enum AlertEngine {
                 key: "cache-\(session.sessionId)-\(Int(lastTurnAt.timeIntervalSince1970))",
                 title: "\(session.name ?? session.sessionId) cache expiring",
                 body: "\(context / 1000)k-token cache dies in \(Int(expiresAt.timeIntervalSince(now)))s. Touch the session to keep it warm."
+            )
+        }
+    }
+
+    private static func cacheMissAlerts(fleet: FleetSnapshot) -> [Alert] {
+        fleet.sessions.compactMap { session in
+            guard let missAt = session.lastCacheMissAt else { return nil }
+            return Alert(
+                key: "miss-\(session.sessionId)-\(Int(missAt.timeIntervalSince1970))",
+                title: "\(session.name ?? session.sessionId) paid a silent cache miss",
+                body: "A turn rewrote the full context while the cache should have been warm. Usual causes: Claude Code upgrade, model/effort switch, or MCP server change."
             )
         }
     }

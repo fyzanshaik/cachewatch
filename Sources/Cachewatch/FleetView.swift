@@ -103,6 +103,8 @@ private struct QuotaBadge: View {
 private struct SessionRow: View {
     let session: SessionSnapshot
     let now: Date
+    @State private var confirmingClose = false
+    @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -134,8 +136,22 @@ private struct SessionRow: View {
                 if let cost = session.costUSD, cost > 0 {
                     Text(cost, format: .currency(code: "USD"))
                 }
+                if let resume = Pricing.costToResume(for: session, at: now) {
+                    Text("resume ~\(resume, format: .currency(code: "USD"))")
+                        .foregroundStyle(.orange.opacity(0.9))
+                        .help("Estimated full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
+                }
                 Spacer()
-                if let last = session.lastTurnAt {
+                if hovering {
+                    Button {
+                        confirmingClose = true
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Close this session (SIGTERM to pid \(session.pid))")
+                } else if let last = session.lastTurnAt {
                     Text("\(Format.age(since: last, now: now)) ago")
                 }
             }
@@ -144,6 +160,18 @@ private struct SessionRow: View {
             .monospacedDigit()
         }
         .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .confirmationDialog(
+            "Close \(session.name ?? session.sessionId)?",
+            isPresented: $confirmingClose
+        ) {
+            Button("Close session", role: .destructive) {
+                kill(session.pid, SIGTERM)
+            }
+        } message: {
+            Text("Sends SIGTERM to the Claude Code process. Unsaved prompt drafts in that terminal are lost.")
+        }
     }
 
     private var statusColor: Color {

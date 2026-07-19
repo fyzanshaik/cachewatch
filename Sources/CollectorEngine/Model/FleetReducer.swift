@@ -23,6 +23,9 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
     public var costUSD: Double?
     public var contextUsedPercentage: Double?
     public var memoryBytes: UInt64?
+    /// Timestamp of the last turn that paid a full rewrite while the cache should
+    /// have been warm — the silent cache-miss signature (resume/upgrade regressions).
+    public var lastCacheMissAt: Date?
 
     public var id: String { sessionId }
 
@@ -72,7 +75,11 @@ public struct FleetReducer: Sendable {
         var cacheTTL: CacheTTL?
         var costUSD: Double?
         var contextUsedPercentage: Double?
+        var lastCacheMissAt: Date?
     }
+
+    /// Rewrites smaller than this are prefix-invalidation noise, not a full miss.
+    private static let cacheMissMinRewriteTokens = 50_000
 
     private var registry: [SessionRegistryEntry] = []
     private var enrichments: [String: Enrichment] = [:]
@@ -90,6 +97,13 @@ public struct FleetReducer: Sendable {
         case .assistantTurn(let turn):
             guard !turn.isSidechain else { return }
             var e = enrichments[turn.sessionId] ?? Enrichment()
+            if let usage = turn.usage,
+               let previousTurnAt = e.lastTurnAt, let previousTTL = e.cacheTTL,
+               turn.timestamp < previousTurnAt.addingTimeInterval(previousTTL.duration),
+               usage.cacheReadInputTokens == 0,
+               usage.cacheCreationInputTokens >= Self.cacheMissMinRewriteTokens {
+                e.lastCacheMissAt = turn.timestamp
+            }
             e.lastTurnAt = turn.timestamp
             if let model = turn.model { e.model = model }
             if let branch = turn.gitBranch { e.gitBranch = branch }
@@ -138,6 +152,7 @@ public struct FleetReducer: Sendable {
             s.costUSD = e?.costUSD
             s.contextUsedPercentage = e?.contextUsedPercentage
             s.memoryBytes = memoryByPid[entry.pid]
+            s.lastCacheMissAt = e?.lastCacheMissAt
             return s
         }
         return fleet
