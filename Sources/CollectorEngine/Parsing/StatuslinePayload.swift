@@ -22,6 +22,29 @@ public struct StatuslinePayload: Sendable, Decodable {
     public struct RateLimitWindow: Sendable, Codable, Equatable {
         public let usedPercentage: Double?
         public let resetsAt: Date?
+
+        private enum CodingKeys: String, CodingKey {
+            case usedPercentage, resetsAt
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            usedPercentage = try c.decodeIfPresent(Double.self, forKey: .usedPercentage)
+            // Observed live as epoch seconds; docs-era captures showed ISO strings. Accept both.
+            if let epoch = try? c.decodeIfPresent(Double.self, forKey: .resetsAt) {
+                resetsAt = Date(timeIntervalSince1970: epoch)
+            } else if let iso = try? c.decodeIfPresent(String.self, forKey: .resetsAt) {
+                resetsAt = try? Date(iso, strategy: .iso8601)
+            } else {
+                resetsAt = nil
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encodeIfPresent(usedPercentage, forKey: .usedPercentage)
+            try c.encodeIfPresent(resetsAt.map(\.timeIntervalSince1970), forKey: .resetsAt)
+        }
     }
 
     public struct RateLimits: Sendable, Codable, Equatable {
