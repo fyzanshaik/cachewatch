@@ -190,9 +190,9 @@ private struct SessionRow: View {
                 Text("cold")
                     .foregroundStyle(.secondary)
                 if let resume = Pricing.costToResume(for: session, at: now) {
-                    Text("resume ~\(resume, format: .currency(code: "USD"))")
+                    Text("~\(resume, format: .currency(code: "USD"))")
                         .foregroundStyle(.orange.opacity(0.9))
-                        .help("Estimated full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
+                        .help("Cost to resume: the full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
                 }
             }
             .font(.caption)
