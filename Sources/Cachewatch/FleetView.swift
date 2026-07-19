@@ -175,9 +175,10 @@ private struct SessionRow: View {
                     } label: {
                         Text(host)
                             .font(.caption2)
+                            .foregroundStyle(.secondary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Capsule().fill(.quaternary))
+                            .background(Capsule().fill(.quinary))
                     }
                     .buttonStyle(.plain)
                     .help("Running in \(host) — click to bring it forward")
@@ -258,10 +259,15 @@ private struct SessionRow: View {
         }
     }
 
-    /// Statusline-reported fill when available, else tokens against the 200k default.
+    /// Statusline-reported fill when available. Fallback infers the window class:
+    /// holding more than 200k tokens proves a 1M window, so dividing by 200k
+    /// would peg the bar red on perfectly healthy sessions.
     private var contextFraction: Double? {
         if let pct = session.contextUsedPercentage { return pct / 100 }
-        return session.contextTokens.map { min(1, Double($0) / 200_000) }
+        return session.contextTokens.map { tokens in
+            let window = tokens > 180_000 ? 1_000_000.0 : 200_000.0
+            return min(1, Double(tokens) / window)
+        }
     }
 
     private var statusColor: Color {
