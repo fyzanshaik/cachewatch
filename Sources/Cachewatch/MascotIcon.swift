@@ -5,6 +5,7 @@ import SwiftUI
 /// local — the repo ships only the drawn Starburst fallback. The loader keys out
 /// the background color sampled at the top-left corner, so flat-background
 /// sprites (pixel art sheets) drop in without editing.
+@MainActor
 enum MascotIcon {
     static let image: NSImage? = load()
 
