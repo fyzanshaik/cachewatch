@@ -34,7 +34,8 @@ enum Format {
 
     static func model(_ id: String?) -> String {
         guard let id else { return "—" }
-        return id.replacingOccurrences(of: "claude-", with: "")
+        let base = id.split(separator: "[").first.map(String.init) ?? id
+        return base.replacingOccurrences(of: "claude-", with: "")
     }
 }
 

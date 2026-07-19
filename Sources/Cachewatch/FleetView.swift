@@ -15,7 +15,7 @@ struct FleetView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 12)
                 } else {
-                    ForEach(model.fleet.sessions) { session in
+                    ForEach(orderedSessions) { session in
                         SessionRow(session: session, now: context.date)
                     }
                 }
@@ -33,6 +33,16 @@ struct FleetView: View {
             }
             .padding(12)
             .frame(width: 380)
+        }
+    }
+
+    /// Sessions needing input first, then by recency of activity.
+    private var orderedSessions: [SessionSnapshot] {
+        model.fleet.sessions.sorted { a, b in
+            if (a.status == .waiting) != (b.status == .waiting) {
+                return a.status == .waiting
+            }
+            return (a.lastTurnAt ?? a.updatedAt) > (b.lastTurnAt ?? b.updatedAt)
         }
     }
 
@@ -109,6 +119,12 @@ private struct SessionRow: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                if session.status == .waiting {
+                    Text("needs input")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.orange)
+                }
                 cacheBadge
             }
             HStack(spacing: 10) {

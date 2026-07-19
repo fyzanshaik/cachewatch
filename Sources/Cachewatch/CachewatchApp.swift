@@ -19,7 +19,12 @@ struct CachewatchApp: App {
         MenuBarExtra {
             FleetView(model: model)
         } label: {
-            Image(systemName: "gauge.with.dots.needle.50percent")
+            let waiting = model.fleet.sessions.count { $0.status == .waiting }
+            if waiting > 0 {
+                Image(systemName: "\(waiting).circle.fill")
+            } else {
+                Image(systemName: "gauge.with.dots.needle.50percent")
+            }
         }
         .menuBarExtraStyle(.window)
     }
