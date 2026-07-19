@@ -9,6 +9,7 @@ public struct AppState: Sendable, Equatable, Codable {
     public var firedAlertKeys: Set<String> = []
     public var lastRateLimits: StatuslinePayload.RateLimits?
     public var lastRateLimitsAsOf: Date?
+    public var calibration: QuotaCalibrator?
 
     public init() {}
 
@@ -19,6 +20,7 @@ public struct AppState: Sendable, Equatable, Codable {
         firedAlertKeys = try c.decodeIfPresent(Set<String>.self, forKey: .firedAlertKeys) ?? []
         lastRateLimits = try c.decodeIfPresent(StatuslinePayload.RateLimits.self, forKey: .lastRateLimits)
         lastRateLimitsAsOf = try c.decodeIfPresent(Date.self, forKey: .lastRateLimitsAsOf)
+        calibration = try c.decodeIfPresent(QuotaCalibrator.self, forKey: .calibration)
     }
 
     public func encoded() throws -> Data {

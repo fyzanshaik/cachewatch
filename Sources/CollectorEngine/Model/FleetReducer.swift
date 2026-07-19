@@ -60,6 +60,9 @@ public struct FleetSnapshot: Sendable, Equatable {
     public var sessions: [SessionSnapshot] = []
     public var rateLimits: StatuslinePayload.RateLimits?
     public var rateLimitsAsOf: Date?
+    /// API-priced spend across all sessions and subagents since launch replay.
+    public var cumulativeTurnCostUSD = 0.0
+    public var calibration = QuotaCalibrator()
 
     public init() {}
 }
@@ -97,8 +100,12 @@ public struct FleetReducer: Sendable {
     private var hostByPid: [Int32: ProcessTree.Host?] = [:]
     private var rateLimits: StatuslinePayload.RateLimits?
     private var rateLimitsAsOf: Date?
+    private var cumulativeTurnCostUSD = 0.0
+    private var calibration: QuotaCalibrator
 
-    public init() {}
+    public init(calibration: QuotaCalibrator = QuotaCalibrator()) {
+        self.calibration = calibration
+    }
 
     public mutating func apply(_ event: CollectorEvent) {
         switch event {
@@ -116,6 +123,10 @@ public struct FleetReducer: Sendable {
             registry = entries
 
         case .assistantTurn(let turn):
+            if let usage = turn.usage, let model = turn.model,
+               let cost = Pricing.turnCostUSD(model: model, usage: usage) {
+                cumulativeTurnCostUSD += cost
+            }
             guard !turn.isSidechain else { return }
             var e = enrichments[turn.sessionId] ?? Enrichment()
             if let usage = turn.usage,
@@ -143,6 +154,13 @@ public struct FleetReducer: Sendable {
             if let limits = payload.rateLimits {
                 rateLimits = limits
                 rateLimitsAsOf = receivedAt
+                if let used = limits.fiveHour?.usedPercentage {
+                    calibration.observe(
+                        cumulativeCostUSD: cumulativeTurnCostUSD,
+                        usedPercentage: used,
+                        resetsAt: limits.fiveHour?.resetsAt
+                    )
+                }
             }
 
         case .memorySample(let pid, let residentBytes, let host):
@@ -155,6 +173,8 @@ public struct FleetReducer: Sendable {
         var fleet = FleetSnapshot()
         fleet.rateLimits = rateLimits
         fleet.rateLimitsAsOf = rateLimitsAsOf
+        fleet.cumulativeTurnCostUSD = cumulativeTurnCostUSD
+        fleet.calibration = calibration
         fleet.sessions = registry.map { entry in
             let e = enrichments[entry.sessionId]
             var s = SessionSnapshot(

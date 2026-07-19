@@ -28,7 +28,7 @@ final class NotchNotifier {
         showing = true
         let alert = queue.removeFirst()
 
-        let size = NSSize(width: 440, height: 96)
+        let size = NSSize(width: 520, height: 124)
         let frame = NSRect(
             x: screen.frame.midX - size.width / 2,
             y: screen.frame.maxY - size.height,
@@ -69,53 +69,40 @@ private struct NotchBanner: View {
     let dismiss: () -> Void
 
     @State private var revealed = false
-    @State private var pulse = false
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))  // Claude-adjacent terracotta
-                        .rotationEffect(.degrees(pulse ? 12 : -12))
-                    Image(systemName: "clock")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .offset(x: 11, y: 9)
-                }
-                .scaleEffect(pulse ? 1.08 : 0.94)
-                .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: pulse)
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 14) {
+                StarburstMascot()
+                VStack(alignment: .leading, spacing: 3) {
                     Text(alert.title)
-                        .font(.callout)
+                        .font(.title3)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                     Text(alert.body)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.75))
                         .lineLimit(2)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 34)   // clears the physical notch band
-            .padding(.bottom, 14)
-            .frame(width: 440, alignment: .leading)
+            .padding(.horizontal, 22)
+            .padding(.top, 38)   // clears the physical notch band
+            .padding(.bottom, 18)
+            .frame(width: 520, alignment: .leading)
             .background(
                 UnevenRoundedRectangle(bottomLeadingRadius: 22, bottomTrailingRadius: 22)
                     .fill(.black)
             )
-            .offset(y: revealed ? 0 : -110)
+            .offset(y: revealed ? 0 : -140)
             .opacity(revealed ? 1 : 0)
             Spacer(minLength: 0)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
                 revealed = true
             }
-            pulse = true
             Task {
                 try? await Task.sleep(for: .seconds(5))
                 withAnimation(.easeIn(duration: 0.35)) {

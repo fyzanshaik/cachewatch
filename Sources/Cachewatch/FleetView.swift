@@ -16,7 +16,7 @@ struct FleetView: View {
                         .padding(.vertical, 12)
                 } else {
                     ForEach(orderedSessions) { session in
-                        SessionRow(session: session, now: context.date)
+                        SessionRow(session: session, now: context.date, fleet: model.fleet)
                     }
                 }
                 Divider()
@@ -120,6 +120,7 @@ private struct QuotaBadge: View {
 private struct SessionRow: View {
     let session: SessionSnapshot
     let now: Date
+    let fleet: FleetSnapshot
     @State private var confirmingClose = false
     @State private var hovering = false
 
@@ -230,9 +231,17 @@ private struct SessionRow: View {
                 Text("cold")
                     .foregroundStyle(.secondary)
                 if let resume = Pricing.costToResume(for: session, at: now) {
-                    Text("~\(resume, format: .currency(code: "USD"))")
-                        .foregroundStyle(.orange.opacity(0.9))
-                        .help("Cost to resume: the full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
+                    // On a Plan with a fitted calibration, speak in quota; else dollars.
+                    if fleet.rateLimits != nil,
+                       let pct = fleet.calibration.percentOfWindow(forCost: resume) {
+                        Text("~\(pct, format: .number.precision(.fractionLength(pct < 1 ? 1 : 0)))% 5h")
+                            .foregroundStyle(.orange.opacity(0.9))
+                            .help("Cost to resume as a share of your 5-hour window, from observed quota burn on this account")
+                    } else {
+                        Text("~\(resume, format: .currency(code: "USD"))")
+                            .foregroundStyle(.orange.opacity(0.9))
+                            .help("Cost to resume: the full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
+                    }
                 }
             }
             .font(.caption)

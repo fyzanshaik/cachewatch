@@ -13,6 +13,11 @@ final class AlertCenter {
         state = store.load()
     }
 
+    /// Calibration learned in previous runs, seeded into the collector at launch.
+    var storedCalibration: QuotaCalibrator {
+        state.calibration ?? QuotaCalibrator()
+    }
+
     func deliverTest() {
         deliver(Alert(
             key: "test",
@@ -35,6 +40,10 @@ final class AlertCenter {
         if let limits = fleet.rateLimits, limits != state.lastRateLimits {
             state.lastRateLimits = limits
             state.lastRateLimitsAsOf = fleet.rateLimitsAsOf
+            changed = true
+        }
+        if fleet.calibration != state.calibration {
+            state.calibration = fleet.calibration
             changed = true
         }
         let alerts = AlertEngine.evaluate(

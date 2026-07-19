@@ -42,10 +42,11 @@ struct CachewatchApp: App {
 @Observable
 final class FleetModel {
     private(set) var fleet = FleetSnapshot()
-    private let collector = Collector()
+    private let collector: Collector
     let alertCenter = AlertCenter()
 
     init() {
+        collector = Collector(calibration: alertCenter.storedCalibration)
         Task {
             await collector.start()
             for await snapshot in await collector.snapshots {

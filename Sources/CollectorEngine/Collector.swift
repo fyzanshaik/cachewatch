@@ -27,8 +27,9 @@ public actor Collector {
     private var lastPublished: FleetSnapshot?
     private var started = false
 
-    public init(config: CollectorConfig = CollectorConfig()) {
+    public init(config: CollectorConfig = CollectorConfig(), calibration: QuotaCalibrator = QuotaCalibrator()) {
         self.config = config
+        self.reducer = FleetReducer(calibration: calibration)
     }
 
     public var snapshots: AsyncStream<FleetSnapshot> {

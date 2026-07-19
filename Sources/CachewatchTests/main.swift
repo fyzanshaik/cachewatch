@@ -99,6 +99,7 @@ runQuotaTests(t)
 runPricingTests(t)
 runCacheMissTests(t)
 runStatusTests(t)
+runCalibrationTests(t)
 
 // MARK: - Integration
 
