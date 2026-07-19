@@ -137,7 +137,13 @@ private struct SessionRow: View {
                     Text(cost, format: .currency(code: "USD"))
                 }
                 Spacer()
-                if hovering {
+                // Both trailing views live in one ZStack so hover toggles opacity,
+                // never row width — otherwise the list wobbles under the pointer.
+                ZStack(alignment: .trailing) {
+                    if let last = session.lastTurnAt {
+                        Text("\(Format.age(since: last, now: now)) ago")
+                            .opacity(hovering ? 0 : 1)
+                    }
                     Button("Close session") {
                         confirmingClose = true
                     }
@@ -145,8 +151,8 @@ private struct SessionRow: View {
                     .controlSize(.mini)
                     .tint(.red)
                     .help("Quits this Claude Code process (asks first)")
-                } else if let last = session.lastTurnAt {
-                    Text("\(Format.age(since: last, now: now)) ago")
+                    .opacity(hovering ? 1 : 0)
+                    .allowsHitTesting(hovering)
                 }
             }
             .font(.caption)
