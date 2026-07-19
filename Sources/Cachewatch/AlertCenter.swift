@@ -18,6 +18,15 @@ final class AlertCenter {
         state.calibration ?? QuotaCalibrator()
     }
 
+    var notchHUDEnabled: Bool {
+        get { state.notchHUDEnabled }
+        set {
+            state.notchHUDEnabled = newValue
+            notch?.hudEnabled = newValue
+            store.save(state)
+        }
+    }
+
     /// Last-seen quota, so the display survives restarts (shown with its age).
     var storedRateLimits: (StatuslinePayload.RateLimits, Date)? {
         guard let limits = state.lastRateLimits, let asOf = state.lastRateLimitsAsOf else { return nil }

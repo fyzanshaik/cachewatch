@@ -27,6 +27,21 @@ final class NotchSurface {
 
     var canShow: Bool { notchScreen != nil }
 
+    /// Ambient pill visibility; alerts show regardless. Persisted in AppState.
+    var hudEnabled = true {
+        didSet { applyVisibility() }
+    }
+
+    private func applyVisibility() {
+        guard let panel else { return }
+        let ambientVisible = hudEnabled || state.mode != .collapsed
+        if ambientVisible {
+            panel.orderFrontRegardless()
+        } else {
+            panel.orderOut(nil)
+        }
+    }
+
     private var notchScreen: NSScreen? {
         NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
     }
@@ -43,7 +58,7 @@ final class NotchSurface {
         ))
         self.panel = panel
         applyFrame()
-        panel.orderFrontRegardless()
+        applyVisibility()
     }
 
     func show(_ alert: CollectorEngine.Alert) {
@@ -53,6 +68,7 @@ final class NotchSurface {
         } else {
             state.mode = .alert(alert)
             applyFrame()
+            applyVisibility()
         }
     }
 
@@ -63,6 +79,7 @@ final class NotchSurface {
             state.mode = .collapsed
         }
         applyFrame()
+        applyVisibility()
     }
 
     private func hoverChanged(_ inside: Bool) {
@@ -73,14 +90,16 @@ final class NotchSurface {
         applyFrame()
     }
 
-    /// Wing width flanking the notch in collapsed mode.
-    static let wingWidth: CGFloat = 130
+    /// Height of the ambient strip hanging below the physical notch.
+    static let pillHeight: CGFloat = 22
 
     private func applyFrame() {
         guard let panel, let screen = notchScreen else { return }
         let notch = notchGeometry(of: screen)
+        // Collapsed stays within the notch's own width: nothing clickable lives
+        // under the camera housing, so the pill can never block menu items.
         let size: NSSize = switch state.mode {
-        case .collapsed: NSSize(width: notch.width + Self.wingWidth * 2, height: notch.height)
+        case .collapsed: NSSize(width: notch.width, height: notch.height + Self.pillHeight)
         case .alert: NSSize(width: 560, height: 130)
         case .expanded: NSSize(width: 510, height: 640)
         }
@@ -128,7 +147,7 @@ private struct NotchRoot: View {
         VStack(spacing: 0) {
             switch state.mode {
             case .collapsed:
-                Wings(fleet: model.fleet)
+                UnderNotchPill(fleet: model.fleet)
             case .alert(let alert):
                 AlertCard(alert: alert, dismiss: onAlertDone)
             case .expanded:
@@ -144,34 +163,36 @@ private struct NotchRoot: View {
     }
 }
 
-/// Ambient stats flanking the physical notch, drawn as one continuous black bar.
-private struct Wings: View {
+/// Minimal ambient strip hanging just below the physical notch: mascot, 5h
+/// quota, and status dots — never wider than the notch itself.
+private struct UnderNotchPill: View {
     let fleet: FleetSnapshot
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
-            HStack(spacing: 0) {
-                HStack(spacing: 5) {
-                    if let used = fleet.rateLimits?.fiveHour?.usedPercentage {
-                        Text("5h \(Int(used))%")
-                            .foregroundStyle(used >= 80 ? .red : used >= 60 ? .orange : .white.opacity(0.85))
-                    } else {
-                        Text("5h —").foregroundStyle(.white.opacity(0.4))
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)  // the notch band itself: physically invisible
+                HStack(spacing: 8) {
+                    if let icon = MascotIcon.image {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(width: 14, height: 14)
                     }
-                }
-                .frame(width: NotchSurface.wingWidth)
-                Color.clear
-                    .frame(minWidth: 100, maxWidth: .infinity)
-                HStack(spacing: 7) {
+                    if let used = fleet.rateLimits?.fiveHour?.usedPercentage {
+                        Text("\(Int(used))%")
+                            .foregroundStyle(used >= 80 ? .red : used >= 60 ? .orange : .white.opacity(0.85))
+                    }
                     counter(fleet.sessions.count { $0.status == .busy }, .green)
                     counter(fleet.sessions.count { $0.status == .waiting }, .orange)
                 }
-                .frame(width: NotchSurface.wingWidth)
+                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .frame(height: NotchSurface.pillHeight)
             }
-            .font(.system(size: 11, weight: .medium).monospacedDigit())
-            .frame(height: 34)
+            .frame(maxWidth: .infinity)
             .background(
-                UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10)
+                UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12)
                     .fill(.black)
             )
         }
@@ -181,7 +202,7 @@ private struct Wings: View {
     private func counter(_ count: Int, _ color: Color) -> some View {
         if count > 0 {
             HStack(spacing: 3) {
-                Circle().fill(color).frame(width: 7, height: 7)
+                Circle().fill(color).frame(width: 6, height: 6)
                 Text("\(count)").foregroundStyle(.white.opacity(0.85))
             }
         }

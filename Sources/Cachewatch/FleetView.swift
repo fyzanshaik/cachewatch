@@ -23,6 +23,13 @@ struct FleetView: View {
                 HStack {
                     memorySummary
                     Spacer()
+                    Button(model.alertCenter.notchHUDEnabled ? "Notch: on" : "Notch: off") {
+                        model.alertCenter.notchHUDEnabled.toggle()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+                    .help("Ambient pill under the notch; alerts still appear there when off")
                     Button("Test alert") { model.alertCenter.deliverTest() }
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)

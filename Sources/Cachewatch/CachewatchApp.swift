@@ -65,6 +65,7 @@ final class FleetModel {
             guard let self else { return }
             self.notchSurface.attach(model: self)
             self.alertCenter.notch = self.notchSurface
+            self.notchSurface.hudEnabled = self.alertCenter.notchHUDEnabled
         }
     }
 }
