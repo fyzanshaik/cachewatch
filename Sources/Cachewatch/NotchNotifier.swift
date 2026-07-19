@@ -74,11 +74,18 @@ private struct NotchBanner: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: "sparkle")
-                    .font(.title2)
-                    .foregroundStyle(.orange)
-                    .scaleEffect(pulse ? 1.15 : 0.95)
-                    .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: pulse)
+                ZStack {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))  // Claude-adjacent terracotta
+                        .rotationEffect(.degrees(pulse ? 12 : -12))
+                    Image(systemName: "clock")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .offset(x: 11, y: 9)
+                }
+                .scaleEffect(pulse ? 1.08 : 0.94)
+                .animation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true), value: pulse)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(alert.title)
                         .font(.callout)

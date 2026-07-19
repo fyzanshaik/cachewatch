@@ -23,7 +23,14 @@ struct CachewatchApp: App {
             if waiting > 0 {
                 Image(systemName: "\(waiting).circle.fill")
             } else {
-                Image(systemName: "gauge.with.dots.needle.50percent")
+                // Starburst-plus-timer: the Claude-adjacent asterisk with a cache clock.
+                Image(systemName: "timer")
+                    .symbolVariant(.none)
+                    .overlay(alignment: .topTrailing) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 7, weight: .bold))
+                            .offset(x: 3, y: -2)
+                    }
             }
         }
         .menuBarExtraStyle(.window)
