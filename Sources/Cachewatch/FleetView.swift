@@ -136,21 +136,15 @@ private struct SessionRow: View {
                 if let cost = session.costUSD, cost > 0 {
                     Text(cost, format: .currency(code: "USD"))
                 }
-                if let resume = Pricing.costToResume(for: session, at: now) {
-                    Text("resume ~\(resume, format: .currency(code: "USD"))")
-                        .foregroundStyle(.orange.opacity(0.9))
-                        .help("Estimated full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
-                }
                 Spacer()
                 if hovering {
-                    Button {
+                    Button("Close session") {
                         confirmingClose = true
-                    } label: {
-                        Image(systemName: "xmark.circle")
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("Close this session (SIGTERM to pid \(session.pid))")
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .tint(.red)
+                    .help("Quits this Claude Code process (asks first)")
                 } else if let last = session.lastTurnAt {
                     Text("\(Format.age(since: last, now: now)) ago")
                 }
@@ -192,9 +186,17 @@ private struct SessionRow: View {
                 .monospacedDigit()
                 .foregroundStyle(expiresAt.timeIntervalSince(now) < 120 ? .orange : .green)
         case .cold:
-            Text("cold")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text("cold")
+                    .foregroundStyle(.secondary)
+                if let resume = Pricing.costToResume(for: session, at: now) {
+                    Text("resume ~\(resume, format: .currency(code: "USD"))")
+                        .foregroundStyle(.orange.opacity(0.9))
+                        .help("Estimated full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
+                }
+            }
+            .font(.caption)
+            .monospacedDigit()
         case .unknown:
             EmptyView()
         }
