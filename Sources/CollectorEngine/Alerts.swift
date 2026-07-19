@@ -53,6 +53,12 @@ public struct Alert: Sendable, Equatable {
     public let key: String
     public let title: String
     public let body: String
+
+    public init(key: String, title: String, body: String) {
+        self.key = key
+        self.title = title
+        self.body = body
+    }
 }
 
 public enum AlertEngine {

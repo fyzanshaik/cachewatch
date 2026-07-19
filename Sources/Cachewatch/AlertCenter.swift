@@ -7,9 +7,18 @@ import CollectorEngine
 final class AlertCenter {
     private let store = StateStore()
     private var state: AppState
+    private let notch = NotchNotifier()
 
     init() {
         state = store.load()
+    }
+
+    func deliverTest() {
+        deliver(Alert(
+            key: "test",
+            title: "Cachewatch test notification",
+            body: "This is how alerts arrive. Quota, cache expiry, idle sessions, and cache misses all use this."
+        ))
     }
 
     func run(fleet: @escaping @MainActor () -> FleetSnapshot) {
@@ -41,9 +50,18 @@ final class AlertCenter {
         }
     }
 
-    /// osascript keeps us working from a bare `swift run` executable;
-    /// UserNotifications requires an app bundle and replaces this later.
     private func deliver(_ alert: Alert) {
+        if notch.canShow {
+            notch.show(alert)
+        } else {
+            deliverOSAScript(alert)
+        }
+    }
+
+    /// Fallback for clamshell/external-only displays. osascript keeps us working
+    /// from a bare `swift run` executable; UserNotifications requires an app
+    /// bundle and replaces this once packaged.
+    private func deliverOSAScript(_ alert: Alert) {
         let escape = { (s: String) in s.replacingOccurrences(of: "\"", with: "\\\"") }
         let script = "display notification \"\(escape(alert.body))\" with title \"\(escape(alert.title))\""
         let process = Process()

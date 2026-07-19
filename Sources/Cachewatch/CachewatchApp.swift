@@ -36,7 +36,7 @@ struct CachewatchApp: App {
 final class FleetModel {
     private(set) var fleet = FleetSnapshot()
     private let collector = Collector()
-    private let alertCenter = AlertCenter()
+    let alertCenter = AlertCenter()
 
     init() {
         Task {

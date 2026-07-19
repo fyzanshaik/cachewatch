@@ -21,10 +21,12 @@ struct FleetView: View {
                 }
                 Divider()
                 HStack {
-                    Text("Cachewatch")
+                    memorySummary
+                    Spacer()
+                    Button("Test alert") { model.alertCenter.deliverTest() }
+                        .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
                         .font(.caption)
-                    Spacer()
                     Button("Quit") { NSApplication.shared.terminate(nil) }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
@@ -34,6 +36,16 @@ struct FleetView: View {
             .padding(12)
             .frame(width: 380)
         }
+    }
+
+    private var memorySummary: some View {
+        let used = model.fleet.sessions.compactMap(\.memoryBytes).reduce(0, +)
+        let physical = ProcessInfo.processInfo.physicalMemory
+        let fraction = Double(used) / Double(physical)
+        return Text("sessions hold \(Format.memory(used)) of \(Format.memory(physical))")
+            .font(.caption)
+            .foregroundStyle(fraction > 0.25 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
+            .monospacedDigit()
     }
 
     /// Sessions needing input first, then by recency of activity.
