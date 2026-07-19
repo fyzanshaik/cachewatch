@@ -31,6 +31,7 @@ struct CachewatchApp: App {
 final class FleetModel {
     private(set) var fleet = FleetSnapshot()
     private let collector = Collector()
+    private let alertCenter = AlertCenter()
 
     init() {
         Task {
@@ -39,5 +40,6 @@ final class FleetModel {
                 fleet = snapshot
             }
         }
+        alertCenter.run { [weak self] in self?.fleet ?? FleetSnapshot() }
     }
 }

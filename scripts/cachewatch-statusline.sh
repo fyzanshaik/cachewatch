@@ -17,4 +17,11 @@ fi
 
 if [ -n "$CACHEWATCH_NEXT_STATUSLINE" ]; then
     printf '%s' "$INPUT" | $CACHEWATCH_NEXT_STATUSLINE
+elif command -v jq >/dev/null 2>&1; then
+    printf '%s' "$INPUT" | jq -r '[
+        .model.display_name,
+        (if .context_window.used_percentage != null then "ctx \(.context_window.used_percentage | round)%" else empty end),
+        (if .rate_limits.five_hour.used_percentage != null then "5h \(.rate_limits.five_hour.used_percentage | round)%" else empty end),
+        (if .rate_limits.seven_day.used_percentage != null then "7d \(.rate_limits.seven_day.used_percentage | round)%" else empty end)
+    ] | map(select(. != null)) | join(" | ")'
 fi

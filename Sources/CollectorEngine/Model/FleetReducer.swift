@@ -26,6 +26,17 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
 
     public var id: String { sessionId }
 
+    public init(sessionId: String, pid: Int32, name: String?, cwd: String,
+                status: SessionRegistryEntry.Status, startedAt: Date, updatedAt: Date) {
+        self.sessionId = sessionId
+        self.pid = pid
+        self.name = name
+        self.cwd = cwd
+        self.status = status
+        self.startedAt = startedAt
+        self.updatedAt = updatedAt
+    }
+
     /// Client-side expectation from last main turn + TTL bucket; the server may evict earlier.
     public func cacheState(at now: Date) -> CacheState {
         guard let lastTurnAt, let cacheTTL else { return .unknown }

@@ -19,12 +19,12 @@ public struct StatuslinePayload: Sendable, Decodable {
         public let usedPercentage: Double?
     }
 
-    public struct RateLimitWindow: Sendable, Decodable, Equatable {
+    public struct RateLimitWindow: Sendable, Codable, Equatable {
         public let usedPercentage: Double?
         public let resetsAt: Date?
     }
 
-    public struct RateLimits: Sendable, Decodable, Equatable {
+    public struct RateLimits: Sendable, Codable, Equatable {
         public let fiveHour: RateLimitWindow?
         public let sevenDay: RateLimitWindow?
     }
@@ -39,15 +39,8 @@ public struct StatuslinePayload: Sendable, Decodable {
     public let version: String?
 
     public static func decode(from data: Data) throws -> StatuslinePayload {
-        try decoder.decode(StatuslinePayload.self, from: data)
+        try JSONDecoder.statusline.decode(StatuslinePayload.self, from: data)
     }
-
-    private static let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        d.dateDecodingStrategy = .iso8601
-        return d
-    }()
 
     private enum CodingKeys: String, CodingKey {
         case sessionId, transcriptPath, cwd, model, cost, contextWindow, rateLimits, version
@@ -55,6 +48,16 @@ public struct StatuslinePayload: Sendable, Decodable {
 
     private enum CostKeys: String, CodingKey {
         case totalCostUSD = "totalCostUsd"
+    }
+}
+
+public extension JSONDecoder {
+    /// Decoder matching the statusline JSON's snake_case keys and ISO 8601 dates.
+    static var statusline: JSONDecoder {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        d.dateDecodingStrategy = .iso8601
+        return d
     }
 }
 

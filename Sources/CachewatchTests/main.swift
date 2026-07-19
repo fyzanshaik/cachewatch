@@ -92,4 +92,8 @@ runReducerTests(t)
 
 runSourceTests(t)
 
+// MARK: - Alerts & state
+
+runAlertTests(t)
+
 t.finish()
