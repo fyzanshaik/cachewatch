@@ -10,7 +10,7 @@ public struct AppState: Sendable, Equatable, Codable {
     public var lastRateLimits: StatuslinePayload.RateLimits?
     public var lastRateLimitsAsOf: Date?
     public var calibration: QuotaCalibrator?
-    public var notchHUDEnabled = true
+    public var notchHUDEnabled = false
 
     public init() {}
 
@@ -22,7 +22,7 @@ public struct AppState: Sendable, Equatable, Codable {
         lastRateLimits = try c.decodeIfPresent(StatuslinePayload.RateLimits.self, forKey: .lastRateLimits)
         lastRateLimitsAsOf = try c.decodeIfPresent(Date.self, forKey: .lastRateLimitsAsOf)
         calibration = try c.decodeIfPresent(QuotaCalibrator.self, forKey: .calibration)
-        notchHUDEnabled = try c.decodeIfPresent(Bool.self, forKey: .notchHUDEnabled) ?? true
+        notchHUDEnabled = try c.decodeIfPresent(Bool.self, forKey: .notchHUDEnabled) ?? false
     }
 
     public func encoded() throws -> Data {

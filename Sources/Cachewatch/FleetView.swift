@@ -9,7 +9,16 @@ struct FleetView: View {
             VStack(alignment: .leading, spacing: 8) {
                 header(now: context.date)
                 Divider()
-                if model.fleet.sessions.isEmpty {
+                if model.isLoading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Scanning Claude Code sessions…")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+                } else if model.fleet.sessions.isEmpty {
                     Text("No live Claude Code sessions")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)

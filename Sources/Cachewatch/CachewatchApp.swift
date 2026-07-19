@@ -44,6 +44,8 @@ struct CachewatchApp: App {
 @Observable
 final class FleetModel {
     private(set) var fleet = FleetSnapshot()
+    /// True until the first snapshot arrives — sources are replaying history.
+    private(set) var isLoading = true
     private let collector: Collector
     let alertCenter = AlertCenter()
     private let notchSurface = NotchSurface()
@@ -58,6 +60,7 @@ final class FleetModel {
             await collector.start()
             for await snapshot in await collector.snapshots {
                 fleet = snapshot
+                isLoading = false
             }
         }
         alertCenter.run { [weak self] in self?.fleet ?? FleetSnapshot() }

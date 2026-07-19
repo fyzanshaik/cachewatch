@@ -30,7 +30,7 @@ final class NotchSurface {
     var canShow: Bool { notchScreen != nil }
 
     /// Hover-to-expand availability; alerts show regardless. Persisted in AppState.
-    var hudEnabled = true {
+    var hudEnabled = false {
         didSet { applyVisibility() }
     }
 
