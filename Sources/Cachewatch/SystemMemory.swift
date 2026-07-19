@@ -15,7 +15,7 @@ enum SystemMemory {
             }
         }
         guard result == KERN_SUCCESS else { return nil }
-        let pageSize = UInt64(vm_kernel_page_size)
+        let pageSize = UInt64(getpagesize())
         let pages = UInt64(stats.active_count) + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)
         return pages * pageSize
     }
