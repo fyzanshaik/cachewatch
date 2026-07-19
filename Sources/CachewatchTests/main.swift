@@ -96,4 +96,8 @@ runSourceTests(t)
 
 runAlertTests(t)
 
+// MARK: - Integration
+
+runIntegrationTests(t)
+
 t.finish()

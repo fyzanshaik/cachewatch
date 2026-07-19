@@ -38,17 +38,22 @@ public enum StatuslineListener {
         while true {
             let client = accept(fd, nil, nil)
             guard client >= 0 else { break }
+            // Decode as soon as a full JSON document has arrived rather than waiting
+            // for EOF: macOS `nc -U` holds its write side open after stdin EOF, so an
+            // EOF-gated read deadlocks against the forwarder.
             var data = Data()
             var buffer = [UInt8](repeating: 0, count: 64 * 1024)
-            while true {
+            let maxPayload = 1024 * 1024
+            while data.count < maxPayload {
                 let n = read(client, &buffer, buffer.count)
                 guard n > 0 else { break }
                 data.append(buffer, count: n)
+                if let payload = try? StatuslinePayload.decode(from: data) {
+                    continuation.yield(payload)
+                    break
+                }
             }
             close(client)
-            if let payload = try? StatuslinePayload.decode(from: data) {
-                continuation.yield(payload)
-            }
         }
         close(fd)
         continuation.finish()
