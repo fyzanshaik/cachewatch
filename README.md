@@ -47,21 +47,28 @@ One reducer turns all of it into an immutable fleet snapshot; the UI just render
 
 ## Install
 
-Needs macOS 15+ and Swift 6. Command Line Tools are enough, no Xcode required.
+Needs macOS 15+. Command Line Tools are enough, no Xcode required.
+
+```sh
+brew install fyzanshaik/tap/cachewatch
+cachewatch setup    # wires the statusline forwarder, backs up settings first
+cachewatch          # menu bar app
+```
+
+Or from source:
 
 ```sh
 git clone https://github.com/fyzanshaik/cachewatch && cd cachewatch
 swift run Cachewatch          # menu bar app
+swift run Cachewatch setup    # statusline hookup
 swift run Cachewatch dump     # one-shot fleet table in the terminal
 ```
 
+A prebuilt arm64 binary is also attached to each [release](https://github.com/fyzanshaik/cachewatch/releases).
+
 ### Statusline hookup
 
-Quota and cost come from the JSON Claude Code pipes to its statusline. One command wires it up:
-
-```sh
-swift run Cachewatch setup
-```
+Quota and cost come from the JSON Claude Code pipes to its statusline. `cachewatch setup` wires it up.
 
 This installs the forwarder script to `~/.cachewatch/` and adds it to `~/.claude/settings.json` (with a backup first). Idempotent, and if you already have a statusline it gets chained, not replaced. The script also renders a useful statusline on its own: `Opus 4.8 | ctx 73% | 5h 43% | 7d 12%`. When Cachewatch is not running the forward is a no-op; your statusline never breaks or slows down. New Claude Code sessions pick it up on start.
 
