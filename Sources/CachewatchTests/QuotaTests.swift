@@ -21,6 +21,26 @@ func runQuotaTests(_ t: TestKit) {
         t.expectEqual(noReset.isExpired(at: now), false, "no resets_at means never expired")
     }
 
+    t.run("staleStatuslineSampleCannotRegressQuota") { t in
+        var reducer = FleetReducer()
+        func payload(_ used: Double, resetsIn: TimeInterval) throws -> StatuslinePayload {
+            let json = """
+            {"session_id":"s","rate_limits":{"five_hour":{"used_percentage":\(used),"resets_at":\(now.timeIntervalSince1970 + resetsIn)}}}
+            """
+            return try StatuslinePayload.decode(from: Data(json.utf8))
+        }
+        reducer.apply(.statusline(try payload(8, resetsIn: 3600), receivedAt: now))
+        // Idle session re-renders with its stale view of the same window.
+        reducer.apply(.statusline(try payload(5, resetsIn: 3600), receivedAt: now.addingTimeInterval(60)))
+        t.expectEqual(reducer.snapshot.rateLimits?.fiveHour?.usedPercentage, 8, "stale sample rejected")
+        // Genuine progress still lands.
+        reducer.apply(.statusline(try payload(11, resetsIn: 3600), receivedAt: now.addingTimeInterval(120)))
+        t.expectEqual(reducer.snapshot.rateLimits?.fiveHour?.usedPercentage, 11, "fresh sample accepted")
+        // A NEW window may start low: lower % with a later resets_at is real.
+        reducer.apply(.statusline(try payload(1, resetsIn: 3600 + 18_000), receivedAt: now.addingTimeInterval(300)))
+        t.expectEqual(reducer.snapshot.rateLimits?.fiveHour?.usedPercentage, 1, "new window accepted")
+    }
+
     t.run("expiredWindowDoesNotFireQuotaAlert") { t in
         var fleet = FleetSnapshot()
         let json = """

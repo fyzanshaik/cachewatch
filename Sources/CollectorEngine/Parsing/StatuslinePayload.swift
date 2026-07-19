@@ -57,6 +57,11 @@ public struct StatuslinePayload: Sendable, Decodable {
     public struct RateLimits: Sendable, Codable, Equatable {
         public let fiveHour: RateLimitWindow?
         public let sevenDay: RateLimitWindow?
+
+        public init(fiveHour: RateLimitWindow?, sevenDay: RateLimitWindow?) {
+            self.fiveHour = fiveHour
+            self.sevenDay = sevenDay
+        }
     }
 
     public let sessionId: String

@@ -152,13 +152,23 @@ public struct FleetReducer: Sendable {
             if let model = payload.model?.id { e.model = model }
             enrichments[payload.sessionId] = e
             if let limits = payload.rateLimits {
-                rateLimits = limits
-                rateLimitsAsOf = receivedAt
-                if let used = limits.fiveHour?.usedPercentage {
+                // Statusline rate_limits reflect the SENDING session's last API
+                // response; idle sessions re-rendering on refreshInterval report
+                // stale values. Within one window used-% only ever grows, so a
+                // regression means staleness — merge monotonically per window.
+                let merged = StatuslinePayload.RateLimits(
+                    fiveHour: mergeWindow(current: rateLimits?.fiveHour, incoming: limits.fiveHour),
+                    sevenDay: mergeWindow(current: rateLimits?.sevenDay, incoming: limits.sevenDay)
+                )
+                if merged != rateLimits {
+                    rateLimits = merged
+                    rateLimitsAsOf = receivedAt
+                }
+                if let used = merged.fiveHour?.usedPercentage {
                     calibration.observe(
                         cumulativeCostUSD: cumulativeTurnCostUSD,
                         usedPercentage: used,
-                        resetsAt: limits.fiveHour?.resetsAt
+                        resetsAt: merged.fiveHour?.resetsAt
                     )
                 }
             }
@@ -167,6 +177,19 @@ public struct FleetReducer: Sendable {
             memoryByPid[pid] = residentBytes
             hostByPid[pid] = host
         }
+    }
+
+    private func mergeWindow(
+        current: StatuslinePayload.RateLimitWindow?,
+        incoming: StatuslinePayload.RateLimitWindow?
+    ) -> StatuslinePayload.RateLimitWindow? {
+        guard let incoming else { return current }
+        guard let current, current.resetsAt == incoming.resetsAt,
+              let currentUsed = current.usedPercentage,
+              let incomingUsed = incoming.usedPercentage,
+              incomingUsed < currentUsed
+        else { return incoming }
+        return current
     }
 
     public var snapshot: FleetSnapshot {
