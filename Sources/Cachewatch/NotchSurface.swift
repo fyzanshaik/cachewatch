@@ -2,10 +2,12 @@ import AppKit
 import SwiftUI
 import CollectorEngine
 
-/// The persistent notch presence. One always-on panel with three modes:
-/// - collapsed: black wings flanking the physical notch, ambient stats
+/// The notch as an interaction zone, not a display — nothing can render inside
+/// the physical cutout, and anything visible around it is a black blob over the
+/// user's windows. Three modes:
+/// - collapsed: an INVISIBLE hover target exactly covering the notch dead zone
 /// - alert: the notification banner, taking over the surface briefly
-/// - expanded: the full fleet panel, on hover
+/// - expanded: the full fleet panel, flowing out of the notch on hover
 @MainActor
 @Observable
 final class NotchSurfaceState {
@@ -27,7 +29,7 @@ final class NotchSurface {
 
     var canShow: Bool { notchScreen != nil }
 
-    /// Ambient pill visibility; alerts show regardless. Persisted in AppState.
+    /// Hover-to-expand availability; alerts show regardless. Persisted in AppState.
     var hudEnabled = true {
         didSet { applyVisibility() }
     }
@@ -90,16 +92,14 @@ final class NotchSurface {
         applyFrame()
     }
 
-    /// Height of the ambient strip hanging below the physical notch.
-    static let pillHeight: CGFloat = 22
-
     private func applyFrame() {
         guard let panel, let screen = notchScreen else { return }
         let notch = notchGeometry(of: screen)
-        // Collapsed stays within the notch's own width: nothing clickable lives
-        // under the camera housing, so the pill can never block menu items.
+        // Collapsed is an INVISIBLE hover target exactly matching the notch dead
+        // zone — the physical cutout has no pixels and takes no clicks, so a
+        // panel there has zero visual or interaction footprint.
         let size: NSSize = switch state.mode {
-        case .collapsed: NSSize(width: notch.width, height: notch.height + Self.pillHeight)
+        case .collapsed: NSSize(width: notch.width, height: notch.height)
         case .alert: NSSize(width: 560, height: 130)
         case .expanded: NSSize(width: 510, height: 640)
         }
@@ -147,7 +147,9 @@ private struct NotchRoot: View {
         VStack(spacing: 0) {
             switch state.mode {
             case .collapsed:
-                UnderNotchPill(fleet: model.fleet)
+                // Invisible hover target over the notch dead zone.
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
             case .alert(let alert):
                 AlertCard(alert: alert, dismiss: onAlertDone)
             case .expanded:
@@ -160,52 +162,6 @@ private struct NotchRoot: View {
             Spacer(minLength: 0)
         }
         .onHover(perform: onHoverChange)
-    }
-}
-
-/// Minimal ambient strip hanging just below the physical notch: mascot, 5h
-/// quota, and status dots — never wider than the notch itself.
-private struct UnderNotchPill: View {
-    let fleet: FleetSnapshot
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { _ in
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)  // the notch band itself: physically invisible
-                HStack(spacing: 8) {
-                    if let icon = MascotIcon.image {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .interpolation(.none)
-                            .scaledToFit()
-                            .frame(width: 14, height: 14)
-                    }
-                    if let used = fleet.rateLimits?.fiveHour?.usedPercentage {
-                        Text("\(Int(used))%")
-                            .foregroundStyle(used >= 80 ? .red : used >= 60 ? .orange : .white.opacity(0.85))
-                    }
-                    counter(fleet.sessions.count { $0.status == .busy }, .green)
-                    counter(fleet.sessions.count { $0.status == .waiting }, .orange)
-                }
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
-                .frame(height: NotchSurface.pillHeight)
-            }
-            .frame(maxWidth: .infinity)
-            .background(
-                UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12)
-                    .fill(.black)
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func counter(_ count: Int, _ color: Color) -> some View {
-        if count > 0 {
-            HStack(spacing: 3) {
-                Circle().fill(color).frame(width: 6, height: 6)
-                Text("\(count)").foregroundStyle(.white.opacity(0.85))
-            }
-        }
     }
 }
 

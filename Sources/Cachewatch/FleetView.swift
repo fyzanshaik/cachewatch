@@ -29,7 +29,7 @@ struct FleetView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.tertiary)
                     .font(.caption)
-                    .help("Ambient pill under the notch; alerts still appear there when off")
+                    .help("Hover the notch to open this panel there; alerts appear at the notch either way")
                     Button("Test alert") { model.alertCenter.deliverTest() }
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
