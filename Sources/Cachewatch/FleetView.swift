@@ -43,8 +43,17 @@ struct FleetView: View {
                 .font(.headline)
             Spacer()
             if let limits = model.fleet.rateLimits {
-                QuotaBadge(label: "5h", window: limits.fiveHour, now: now)
-                QuotaBadge(label: "7d", window: limits.sevenDay, now: now)
+                VStack(alignment: .trailing, spacing: 1) {
+                    HStack(spacing: 8) {
+                        QuotaBadge(label: "5h", window: limits.fiveHour, now: now)
+                        QuotaBadge(label: "7d", window: limits.sevenDay, now: now)
+                    }
+                    if let asOf = model.fleet.rateLimitsAsOf, now.timeIntervalSince(asOf) > 120 {
+                        Text("as of \(Format.age(since: asOf, now: now)) ago")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             } else {
                 Text("quota: waiting for statusline data")
                     .font(.caption)
@@ -60,15 +69,23 @@ private struct QuotaBadge: View {
     let now: Date
 
     var body: some View {
-        if let used = window?.usedPercentage {
+        if let window, let used = window.usedPercentage {
             HStack(spacing: 4) {
                 Text(label).foregroundStyle(.secondary)
-                Text("\(Int(used))%")
-                    .foregroundStyle(used >= 80 ? .red : used >= 60 ? .orange : .primary)
-                    .monospacedDigit()
+                if window.isExpired(at: now) {
+                    Text("reset").foregroundStyle(.green)
+                } else {
+                    Text("\(Int(used))%")
+                        .foregroundStyle(used >= 80 ? .red : used >= 60 ? .orange : .primary)
+                        .monospacedDigit()
+                    if let resetsAt = window.resetsAt {
+                        Text("· \(Format.age(since: now, now: resetsAt))")
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
+                }
             }
             .font(.caption)
-            .help(window?.resetsAt.map { "resets in \(Format.age(since: now, now: $0))" } ?? "")
         }
     }
 }

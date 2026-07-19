@@ -95,6 +95,7 @@ runSourceTests(t)
 // MARK: - Alerts & state
 
 runAlertTests(t)
+runQuotaTests(t)
 
 // MARK: - Integration
 

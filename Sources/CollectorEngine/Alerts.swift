@@ -44,7 +44,7 @@ public enum AlertEngine {
         guard config.notificationsEnabled else { return [] }
         var alerts: [Alert] = []
         if config.quota.enabled {
-            alerts += quotaAlerts(fleet: fleet, config: config.quota)
+            alerts += quotaAlerts(fleet: fleet, config: config.quota, now: now)
         }
         if config.cacheExpiry.enabled {
             alerts += cacheExpiryAlerts(fleet: fleet, config: config.cacheExpiry, now: now)
@@ -55,13 +55,15 @@ public enum AlertEngine {
         return alerts.filter { !alreadyFired.contains($0.key) }
     }
 
-    private static func quotaAlerts(fleet: FleetSnapshot, config: AlertConfig.Quota) -> [Alert] {
+    private static func quotaAlerts(fleet: FleetSnapshot, config: AlertConfig.Quota, now: Date) -> [Alert] {
         let windows: [(String, StatuslinePayload.RateLimitWindow?)] = [
             ("5h", fleet.rateLimits?.fiveHour),
             ("7d", fleet.rateLimits?.sevenDay),
         ]
         return windows.compactMap { label, window in
-            guard let used = window?.usedPercentage, used >= config.thresholdPercentage else { return nil }
+            guard let used = window?.usedPercentage, used >= config.thresholdPercentage,
+                  window?.isExpired(at: now) != true
+            else { return nil }
             let windowId = window?.resetsAt.map { String(Int($0.timeIntervalSince1970)) } ?? "unknown"
             return Alert(
                 key: "quota-\(label)-\(windowId)",

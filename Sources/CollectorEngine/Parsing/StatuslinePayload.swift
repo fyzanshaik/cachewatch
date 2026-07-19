@@ -45,6 +45,13 @@ public struct StatuslinePayload: Sendable, Decodable {
             try c.encodeIfPresent(usedPercentage, forKey: .usedPercentage)
             try c.encodeIfPresent(resetsAt.map(\.timeIntervalSince1970), forKey: .resetsAt)
         }
+
+        /// True once resets_at has passed: the reported percentage belongs to a finished
+        /// window and the real usage is ~0 until the next prompt opens a new one.
+        public func isExpired(at now: Date) -> Bool {
+            guard let resetsAt else { return false }
+            return now > resetsAt
+        }
     }
 
     public struct RateLimits: Sendable, Codable, Equatable {
