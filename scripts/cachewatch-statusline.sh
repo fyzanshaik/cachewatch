@@ -11,8 +11,12 @@
 INPUT=$(cat)
 SOCK="${CACHEWATCH_SOCK:-$HOME/.cachewatch/statusline.sock}"
 
+# Foreground on purpose: Claude Code kills the script's process group on exit,
+# reaping backgrounded children before they deliver. The listener closes the
+# connection as soon as it decodes the JSON, so this returns in milliseconds;
+# -w 1 bounds the cost if the listener is wedged.
 if [ -S "$SOCK" ]; then
-    printf '%s' "$INPUT" | nc -U "$SOCK" >/dev/null 2>&1 &
+    printf '%s' "$INPUT" | nc -U -w 1 "$SOCK" >/dev/null 2>&1
 fi
 
 if [ -n "$CACHEWATCH_NEXT_STATUSLINE" ]; then
