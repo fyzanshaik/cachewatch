@@ -23,18 +23,30 @@ public struct AlertConfig: Sendable, Equatable, Codable {
         public var enabled = true
     }
 
+    public struct NeedsInput: Sendable, Equatable, Codable {
+        public var enabled = true
+        public var afterSeconds = 120.0
+    }
+
+    public struct TurnFinished: Sendable, Equatable, Codable {
+        public var enabled = true
+        public var minBusySeconds = 300.0
+    }
+
     public var notificationsEnabled = true
     public var quota = Quota()
     public var cacheExpiry = CacheExpiry()
     public var longIdle = LongIdle()
     public var cacheMiss = CacheMiss()
+    public var needsInput = NeedsInput()
+    public var turnFinished = TurnFinished()
 
     public static let `default` = AlertConfig()
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case notificationsEnabled, quota, cacheExpiry, longIdle, cacheMiss
+        case notificationsEnabled, quota, cacheExpiry, longIdle, cacheMiss, needsInput, turnFinished
     }
 
     // Tolerant of state.json written before a rule existed: missing sections default.
@@ -45,6 +57,8 @@ public struct AlertConfig: Sendable, Equatable, Codable {
         cacheExpiry = try c.decodeIfPresent(CacheExpiry.self, forKey: .cacheExpiry) ?? CacheExpiry()
         longIdle = try c.decodeIfPresent(LongIdle.self, forKey: .longIdle) ?? LongIdle()
         cacheMiss = try c.decodeIfPresent(CacheMiss.self, forKey: .cacheMiss) ?? CacheMiss()
+        needsInput = try c.decodeIfPresent(NeedsInput.self, forKey: .needsInput) ?? NeedsInput()
+        turnFinished = try c.decodeIfPresent(TurnFinished.self, forKey: .turnFinished) ?? TurnFinished()
     }
 }
 
@@ -81,6 +95,12 @@ public enum AlertEngine {
         }
         if config.cacheMiss.enabled {
             alerts += cacheMissAlerts(fleet: fleet)
+        }
+        if config.needsInput.enabled {
+            alerts += needsInputAlerts(fleet: fleet, config: config.needsInput, now: now)
+        }
+        if config.turnFinished.enabled {
+            alerts += turnFinishedAlerts(fleet: fleet, config: config.turnFinished)
         }
         return alerts.filter { !alreadyFired.contains($0.key) }
     }
@@ -126,6 +146,34 @@ public enum AlertEngine {
                 key: "miss-\(session.sessionId)-\(Int(missAt.timeIntervalSince1970))",
                 title: "\(session.name ?? session.sessionId) paid a silent cache miss",
                 body: "A turn rewrote the full context while the cache should have been warm. Usual causes: Claude Code upgrade, model/effort switch, or MCP server change."
+            )
+        }
+    }
+
+    private static func needsInputAlerts(fleet: FleetSnapshot, config: AlertConfig.NeedsInput, now: Date) -> [Alert] {
+        fleet.sessions.compactMap { session in
+            guard session.status == .waiting,
+                  let since = session.statusChangedAt,
+                  now.timeIntervalSince(since) >= config.afterSeconds
+            else { return nil }
+            let minutes = Int(now.timeIntervalSince(since) / 60)
+            return Alert(
+                key: "input-\(session.sessionId)-\(Int(since.timeIntervalSince1970))",
+                title: "\(session.name ?? session.sessionId) needs your input",
+                body: "Waiting \(minutes)m\(session.hostAppName.map { " in \($0)" } ?? "") — its cache keeps burning down while it waits."
+            )
+        }
+    }
+
+    private static func turnFinishedAlerts(fleet: FleetSnapshot, config: AlertConfig.TurnFinished) -> [Alert] {
+        fleet.sessions.compactMap { session in
+            guard let endedAt = session.lastBusyEndAt,
+                  let duration = session.lastBusyDuration, duration >= config.minBusySeconds
+            else { return nil }
+            return Alert(
+                key: "finished-\(session.sessionId)-\(Int(endedAt.timeIntervalSince1970))",
+                title: "\(session.name ?? session.sessionId) finished a \(Int(duration / 60))m turn",
+                body: "Long-running work just completed\(session.hostAppName.map { " in \($0)" } ?? "") — worth a review."
             )
         }
     }

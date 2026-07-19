@@ -26,6 +26,14 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
     /// Timestamp of the last turn that paid a full rewrite while the cache should
     /// have been warm — the silent cache-miss signature (resume/upgrade regressions).
     public var lastCacheMissAt: Date?
+    /// When the current status began (registry statusUpdatedAt).
+    public var statusChangedAt: Date?
+    /// Most recent busy→non-busy transition and how long that turn ran.
+    public var lastBusyEndAt: Date?
+    public var lastBusyDuration: TimeInterval?
+    /// App bundle hosting this session's process tree (cmux, iTerm2, ...).
+    public var hostAppName: String?
+    public var hostAppPid: Int32?
 
     public var id: String { sessionId }
 
@@ -60,7 +68,7 @@ public enum CollectorEvent: Sendable {
     case registrySnapshot([SessionRegistryEntry])
     case assistantTurn(AssistantTurn)
     case statusline(StatuslinePayload, receivedAt: Date)
-    case memorySample(pid: Int32, residentBytes: UInt64)
+    case memorySample(pid: Int32, residentBytes: UInt64, host: ProcessTree.Host? = nil)
 }
 
 /// Pure state machine: every source feeds events in, the canonical FleetSnapshot comes out.
@@ -76,6 +84,8 @@ public struct FleetReducer: Sendable {
         var costUSD: Double?
         var contextUsedPercentage: Double?
         var lastCacheMissAt: Date?
+        var lastBusyEndAt: Date?
+        var lastBusyDuration: TimeInterval?
     }
 
     /// Rewrites smaller than this are prefix-invalidation noise, not a full miss.
@@ -84,6 +94,7 @@ public struct FleetReducer: Sendable {
     private var registry: [SessionRegistryEntry] = []
     private var enrichments: [String: Enrichment] = [:]
     private var memoryByPid: [Int32: UInt64] = [:]
+    private var hostByPid: [Int32: ProcessTree.Host?] = [:]
     private var rateLimits: StatuslinePayload.RateLimits?
     private var rateLimitsAsOf: Date?
 
@@ -92,6 +103,16 @@ public struct FleetReducer: Sendable {
     public mutating func apply(_ event: CollectorEvent) {
         switch event {
         case .registrySnapshot(let entries):
+            let previous = Dictionary(registry.map { ($0.sessionId, $0) }, uniquingKeysWith: { a, _ in a })
+            for entry in entries {
+                guard let old = previous[entry.sessionId],
+                      old.status == .busy, entry.status != .busy
+                else { continue }
+                var e = enrichments[entry.sessionId] ?? Enrichment()
+                e.lastBusyEndAt = entry.statusUpdatedAt
+                e.lastBusyDuration = entry.statusUpdatedAt.timeIntervalSince(old.statusUpdatedAt)
+                enrichments[entry.sessionId] = e
+            }
             registry = entries
 
         case .assistantTurn(let turn):
@@ -124,8 +145,9 @@ public struct FleetReducer: Sendable {
                 rateLimitsAsOf = receivedAt
             }
 
-        case .memorySample(let pid, let residentBytes):
+        case .memorySample(let pid, let residentBytes, let host):
             memoryByPid[pid] = residentBytes
+            hostByPid[pid] = host
         }
     }
 
@@ -153,6 +175,12 @@ public struct FleetReducer: Sendable {
             s.contextUsedPercentage = e?.contextUsedPercentage
             s.memoryBytes = memoryByPid[entry.pid]
             s.lastCacheMissAt = e?.lastCacheMissAt
+            s.statusChangedAt = entry.statusUpdatedAt
+            s.lastBusyEndAt = e?.lastBusyEndAt
+            s.lastBusyDuration = e?.lastBusyDuration
+            let host = hostByPid[entry.pid] ?? nil
+            s.hostAppName = host?.name
+            s.hostAppPid = host?.pid
             return s
         }
         return fleet

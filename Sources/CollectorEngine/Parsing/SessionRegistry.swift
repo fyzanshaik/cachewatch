@@ -20,11 +20,13 @@ public struct SessionRegistryEntry: Sendable, Codable, Identifiable {
     public let status: Status
     public let startedAt: Date
     public let updatedAt: Date
+    /// When the current status began; older CLI versions lack it (falls back to updatedAt).
+    public let statusUpdatedAt: Date
 
     public var id: String { sessionId }
 
     private enum CodingKeys: String, CodingKey {
-        case pid, sessionId, cwd, name, version, status, startedAt, updatedAt
+        case pid, sessionId, cwd, name, version, status, startedAt, updatedAt, statusUpdatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -37,6 +39,8 @@ public struct SessionRegistryEntry: Sendable, Codable, Identifiable {
         status = try c.decodeIfPresent(Status.self, forKey: .status) ?? .unknown
         startedAt = Date(timeIntervalSince1970: try c.decode(Double.self, forKey: .startedAt) / 1000)
         updatedAt = Date(timeIntervalSince1970: try c.decode(Double.self, forKey: .updatedAt) / 1000)
+        let statusMs = try c.decodeIfPresent(Double.self, forKey: .statusUpdatedAt)
+        statusUpdatedAt = statusMs.map { Date(timeIntervalSince1970: $0 / 1000) } ?? updatedAt
     }
 
     public static func decode(from data: Data) throws -> SessionRegistryEntry {

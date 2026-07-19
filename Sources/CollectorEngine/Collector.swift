@@ -73,7 +73,11 @@ public actor Collector {
             while !Task.isCancelled {
                 let table = ProcessTree.sampleAll()
                 for session in self.reducer.snapshot.sessions {
-                    self.apply(.memorySample(pid: session.pid, residentBytes: ProcessTree.subtreeRSS(of: session.pid, in: table)))
+                    self.apply(.memorySample(
+                        pid: session.pid,
+                        residentBytes: ProcessTree.subtreeRSS(of: session.pid, in: table),
+                        host: ProcessTree.hostApp(of: session.pid, in: table)
+                    ))
                 }
                 try? await Task.sleep(for: config.memoryInterval)
             }
@@ -109,7 +113,11 @@ public actor Collector {
         }
         let table = ProcessTree.sampleAll()
         for session in reducer.snapshot.sessions {
-            reducer.apply(.memorySample(pid: session.pid, residentBytes: ProcessTree.subtreeRSS(of: session.pid, in: table)))
+            reducer.apply(.memorySample(
+                pid: session.pid,
+                residentBytes: ProcessTree.subtreeRSS(of: session.pid, in: table),
+                host: ProcessTree.hostApp(of: session.pid, in: table)
+            ))
         }
         return reducer.snapshot
     }

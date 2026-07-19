@@ -39,13 +39,18 @@ struct FleetView: View {
     }
 
     private var memorySummary: some View {
-        let used = model.fleet.sessions.compactMap(\.memoryBytes).reduce(0, +)
-        let physical = ProcessInfo.processInfo.physicalMemory
-        let fraction = Double(used) / Double(physical)
-        return Text("sessions hold \(Format.memory(used)) of \(Format.memory(physical))")
-            .font(.caption)
-            .foregroundStyle(fraction > 0.25 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
-            .monospacedDigit()
+        let sessions = model.fleet.sessions.compactMap(\.memoryBytes).reduce(0, +)
+        let total = SystemMemory.totalBytes
+        let systemUsed = SystemMemory.usedBytes()
+        let pressure = systemUsed.map { Double($0) / Double(total) } ?? 0
+        return Text(
+            "sessions \(Format.memory(sessions))"
+            + (systemUsed.map { " · system \(Format.memory($0)) of \(Format.memory(total))" } ?? "")
+        )
+        .font(.caption)
+        .foregroundStyle(pressure > 0.85 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
+        .monospacedDigit()
+        .help("Session process trees vs total machine memory in use (active + wired + compressed)")
     }
 
     /// Sessions needing input first, then by recency of activity.
@@ -126,6 +131,23 @@ private struct SessionRow: View {
                     .frame(width: 8, height: 8)
                 Text(session.name ?? String(session.sessionId.prefix(8)))
                     .fontWeight(.medium)
+                    .help(session.cwd)
+                if let host = session.hostAppName {
+                    Button {
+                        if let pid = session.hostAppPid {
+                            NSRunningApplication(processIdentifier: pid)?
+                                .activate(options: [.activateAllWindows])
+                        }
+                    } label: {
+                        Text(host)
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(.quaternary))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Running in \(host) — click to bring it forward")
+                }
                 if let branch = session.gitBranch {
                     Text(branch)
                         .font(.caption)

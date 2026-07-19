@@ -98,6 +98,7 @@ runAlertTests(t)
 runQuotaTests(t)
 runPricingTests(t)
 runCacheMissTests(t)
+runStatusTests(t)
 
 // MARK: - Integration
 
