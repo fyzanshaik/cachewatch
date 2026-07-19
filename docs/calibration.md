@@ -43,7 +43,7 @@ When both clear, one interval is recorded: `(dollars spent, percent consumed)`, 
 
 Each interval yields a ratio: dollars per percent. The estimate is the **median** of all recorded ratios (up to the last 200).
 
-Median, not average, because the pairing has a known contamination source: your quota also burns from places Cachewatch cannot observe — claude.ai chats, other machines, other tools spawning Claude sessions, teammates on a shared plan. A contaminated interval looks like "quota jumped 4% while local spend grew $0.30" and yields an absurdly low ratio. With an average (or a ratio of sums), one such interval drags the whole fit; with a median it is just an outlier vote.
+Median, not average, because the pairing has a known contamination source: your quota also burns from places Cachewatch cannot observe: claude.ai chats, other machines, other tools spawning Claude sessions, teammates on a shared plan. A contaminated interval looks like "quota jumped 4% while local spend grew $0.30" and yields an absurdly low ratio. With an average (or a ratio of sums), one such interval drags the whole fit; with a median it is just an outlier vote.
 
 Example with five intervals:
 
