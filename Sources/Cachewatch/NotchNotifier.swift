@@ -73,7 +73,7 @@ private struct NotchBanner: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                StarburstMascot()
+                BannerMascot()
                 VStack(alignment: .leading, spacing: 3) {
                     Text(alert.title)
                         .font(.title3)

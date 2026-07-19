@@ -22,12 +22,6 @@ struct FleetView: View {
                 Divider()
                 HStack {
                     memorySummary
-                    if model.fleet.rateLimits != nil, model.fleet.calibration.dollarsPerPercent == nil {
-                        Text("· learning quota \(Int(model.fleet.calibration.progress * 100))%")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .help("Cachewatch is fitting how tokens map to your Plan's 5h window by watching real burn. Cold-session estimates switch from dollars to % when done.")
-                    }
                     Spacer()
                     Button("Test alert") { model.alertCenter.deliverTest() }
                         .buttonStyle(.plain)
@@ -39,8 +33,8 @@ struct FleetView: View {
                         .font(.caption)
                 }
             }
-            .padding(12)
-            .frame(width: 380)
+            .padding(14)
+            .frame(width: 470)
         }
     }
 
@@ -51,9 +45,11 @@ struct FleetView: View {
         let pressure = systemUsed.map { Double($0) / Double(total) } ?? 0
         return Text(
             "sessions \(Format.memory(sessions))"
-            + (systemUsed.map { " · system \(Format.memory($0)) of \(Format.memory(total))" } ?? "")
+            + (systemUsed.map { " · mac \(Format.memory($0)) / \(Format.memory(total))" } ?? "")
         )
         .font(.caption)
+        .lineLimit(1)
+        .fixedSize()
         .foregroundStyle(pressure > 0.85 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
         .monospacedDigit()
         .help("Session process trees vs total machine memory in use (active + wired + compressed)")
@@ -85,6 +81,12 @@ struct FleetView: View {
                         Text("as of \(Format.age(since: asOf, now: now)) ago")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                    }
+                    if model.fleet.calibration.dollarsPerPercent == nil {
+                        Text("learning quota \(Int(model.fleet.calibration.progress * 100))%")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .help("Fitting how tokens map to your Plan's 5h window from observed burn; cold-session estimates switch from dollars to % when done")
                     }
                 }
             } else {
@@ -138,6 +140,8 @@ private struct SessionRow: View {
                     .frame(width: 8, height: 8)
                 Text(session.name ?? String(session.sessionId.prefix(8)))
                     .fontWeight(.medium)
+                    .lineLimit(1)
+                    .layoutPriority(2)
                     .help(session.cwd)
                 if let host = session.hostAppName {
                     Button {
@@ -200,7 +204,13 @@ private struct SessionRow: View {
             .foregroundStyle(.secondary)
             .monospacedDigit()
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(hovering ? Color.primary.opacity(0.07) : .clear)
+        )
+        .padding(.horizontal, -8)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .confirmationDialog(
