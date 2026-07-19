@@ -6,11 +6,13 @@ import CollectorEngine
 @MainActor
 final class AlertCenter {
     private let store = StateStore()
+    private let history = QuotaHistoryStore()
     private var state: AppState
     weak var notch: NotchSurface?
 
     init() {
         state = store.load()
+        history.prune()
     }
 
     /// Calibration learned in previous runs, seeded into the collector at launch.
@@ -56,6 +58,14 @@ final class AlertCenter {
             state.lastRateLimits = limits
             state.lastRateLimitsAsOf = fleet.rateLimitsAsOf
             changed = true
+            history.append(QuotaSample(
+                recordedAt: fleet.rateLimitsAsOf ?? Date(),
+                fiveHourUsedPercentage: limits.fiveHour?.usedPercentage,
+                fiveHourResetsAt: limits.fiveHour?.resetsAt,
+                sevenDayUsedPercentage: limits.sevenDay?.usedPercentage,
+                sevenDayResetsAt: limits.sevenDay?.resetsAt,
+                cumulativeTurnCostUSD: fleet.cumulativeTurnCostUSD
+            ))
         }
         if fleet.calibration != state.calibration {
             state.calibration = fleet.calibration

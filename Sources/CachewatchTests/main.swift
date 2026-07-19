@@ -100,6 +100,7 @@ runPricingTests(t)
 runCacheMissTests(t)
 runStatusTests(t)
 runCalibrationTests(t)
+runHistoryTests(t)
 
 // MARK: - Integration
 
