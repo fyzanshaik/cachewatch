@@ -1,4 +1,6 @@
 import Foundation
+import ServiceManagement
+import UserNotifications
 import CollectorEngine
 
 /// Evaluates alert rules against the latest fleet on a timer, delivers macOS
@@ -7,12 +9,18 @@ import CollectorEngine
 final class AlertCenter {
     private let store = StateStore()
     private let history = QuotaHistoryStore()
+    private let notificationPresenter = ForegroundNotificationPresenter()
     private var state: AppState
     weak var notch: NotchSurface?
 
     init() {
         state = store.load()
         history.prune()
+        if isBundledApp {
+            reconcileLaunchAtLoginState()
+            UNUserNotificationCenter.current().delegate = notificationPresenter
+            requestNotificationAuthorization()
+        }
     }
 
     /// Calibration learned in previous runs, seeded into the collector at launch.
@@ -26,6 +34,34 @@ final class AlertCenter {
             state.notchHUDEnabled = newValue
             notch?.hudEnabled = newValue
             store.save(state)
+        }
+    }
+
+    var launchAtLoginLabel: String {
+        launchAtLoginStatus.label
+    }
+
+    var launchAtLoginHelp: String {
+        launchAtLoginStatus.help
+    }
+
+    var canManageLaunchAtLogin: Bool {
+        launchAtLoginStatus.canManage
+    }
+
+    func toggleLaunchAtLogin() {
+        guard canManageLaunchAtLogin else { return }
+        let enable = !launchAtLoginStatus.isRegistered
+        do {
+            if enable {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            reconcileLaunchAtLoginState()
+        } catch {
+            // Keep persisted state aligned with what macOS actually accepted.
+            NSLog("Cachewatch could not update launch at login: %@", error.localizedDescription)
         }
     }
 
@@ -87,14 +123,64 @@ final class AlertCenter {
     private func deliver(_ alert: Alert) {
         if let notch, notch.canShow {
             notch.show(alert)
+        } else if isBundledApp {
+            deliverNativeNotification(alert)
         } else {
             deliverOSAScript(alert)
         }
     }
 
-    /// Fallback for clamshell/external-only displays. osascript keeps us working
-    /// from a bare `swift run` executable; UserNotifications requires an app
-    /// bundle and replaces this once packaged.
+    private var isBundledApp: Bool {
+        Bundle.main.bundleIdentifier != nil
+    }
+
+    private var launchAtLoginStatus: LaunchAtLoginStatus {
+        guard isBundledApp else { return .unavailable }
+        return switch SMAppService.mainApp.status {
+        case .enabled: .enabled
+        case .requiresApproval: .pendingApproval
+        default: .disabled
+        }
+    }
+
+    private func reconcileLaunchAtLoginState() {
+        let registered = launchAtLoginStatus.isRegistered
+        guard state.launchAtLogin != registered else { return }
+        state.launchAtLogin = registered
+        store.save(state)
+    }
+
+    private func requestNotificationAuthorization() {
+        Task {
+            do {
+                _ = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert])
+            } catch {
+                NSLog("Cachewatch notification authorization failed: %@", error.localizedDescription)
+            }
+        }
+    }
+
+    private func deliverNativeNotification(_ alert: Alert) {
+        let content = UNMutableNotificationContent()
+        content.title = alert.title
+        content.body = alert.body
+        let request = UNNotificationRequest(
+            identifier: alert.key,
+            content: content,
+            trigger: nil
+        )
+        Task {
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
+                NSLog("Cachewatch native notification failed: %@", error.localizedDescription)
+                deliverOSAScript(alert)
+            }
+        }
+    }
+
+    /// Bare `swift run` executables have no bundle identity for UserNotifications.
     private func deliverOSAScript(_ alert: Alert) {
         let escape = { (s: String) in s.replacingOccurrences(of: "\"", with: "\\\"") }
         let script = "display notification \"\(escape(alert.body))\" with title \"\(escape(alert.title))\""
@@ -102,5 +188,37 @@ final class AlertCenter {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", script]
         try? process.run()
+    }
+}
+
+private final class ForegroundNotificationPresenter: NSObject,
+    UNUserNotificationCenterDelegate, @unchecked Sendable
+{
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner]
+    }
+}
+
+private extension LaunchAtLoginStatus {
+    var label: String {
+        switch self {
+        case .unavailable, .disabled: "Login: off"
+        case .pendingApproval: "Login: pending"
+        case .enabled: "Login: on"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .unavailable:
+            "Launch at login requires the Cachewatch app bundle"
+        case .pendingApproval:
+            "Approve Cachewatch in System Settings > General > Login Items"
+        case .disabled, .enabled:
+            "Launch Cachewatch when you log in"
+        }
     }
 }

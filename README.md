@@ -64,6 +64,12 @@ swift run Cachewatch setup    # statusline hookup
 swift run Cachewatch dump     # one-shot fleet table in the terminal
 ```
 
+For the native app bundle, open `Cachewatch.xcodeproj`, select the Cachewatch
+scheme, and run it. The app target references the same `Sources/Cachewatch`
+files and local `CollectorEngine` package as SwiftPM. Bundled builds use native
+notifications and expose a launch-at-login toggle; bare `swift run` builds keep
+the `osascript` notification fallback.
+
 A prebuilt arm64 binary is also attached to each [release](https://github.com/fyzanshaik/cachewatch/releases).
 
 ### Statusline hookup
@@ -86,9 +92,14 @@ This installs the forwarder script to `~/.cachewatch/` and adds it to `~/.claude
 
 ```sh
 swift run cachewatch-tests
+xcodebuild -project Cachewatch.xcodeproj -scheme Cachewatch \
+  -destination 'platform=macOS,arch=arm64' build
 ```
 
-Engine logic lives in `Sources/CollectorEngine` with no UI imports; the app target is a thin SwiftUI shell. New data enters as a source emitting events into the reducer, and new features are derivations on the snapshot.
+Engine logic lives in `Sources/CollectorEngine` with no UI imports; both the
+SwiftPM executable and Xcode app target use the thin SwiftUI shell in
+`Sources/Cachewatch`. New data enters as a source emitting events into the
+reducer, and new features are derivations on the snapshot.
 
 ## License
 
