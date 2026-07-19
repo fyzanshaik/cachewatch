@@ -12,13 +12,6 @@ enum Main {
     }
 }
 
-@MainActor
-private func menuBarSized(_ image: NSImage) -> NSImage {
-    let sized = image.copy() as! NSImage
-    sized.size = NSSize(width: 20, height: 20)
-    return sized
-}
-
 struct CachewatchApp: App {
     @State private var model = FleetModel()
 
@@ -29,8 +22,8 @@ struct CachewatchApp: App {
             let waiting = model.fleet.sessions.count { $0.status == .waiting }
             if waiting > 0 {
                 Image(systemName: "\(waiting).circle.fill")
-            } else if let icon = MascotIcon.image {
-                Image(nsImage: menuBarSized(icon))
+            } else if let icon = MascotIcon.menuBar {
+                Image(nsImage: icon)
             } else {
                 // Starburst-plus-timer: the Claude-adjacent asterisk with a cache clock.
                 Image(systemName: "timer")

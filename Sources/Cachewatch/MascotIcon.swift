@@ -8,6 +8,16 @@ import SwiftUI
 enum MascotIcon {
     static let image: NSImage? = load()
 
+    /// MenuBarExtra renders nothing for oversized bitmaps — it needs an image
+    /// actually rasterized at status-item size, not one with a small `size` set.
+    static let menuBar: NSImage? = image.map { source in
+        NSImage(size: NSSize(width: 20, height: 20), flipped: false) { rect in
+            NSGraphicsContext.current?.imageInterpolation = .none  // crisp pixel art
+            source.draw(in: rect)
+            return true
+        }
+    }
+
     private static func load() -> NSImage? {
         let path = (NSHomeDirectory() as NSString).appendingPathComponent(".cachewatch/icon.png")
         guard let source = NSImage(contentsOfFile: path) else { return nil }
