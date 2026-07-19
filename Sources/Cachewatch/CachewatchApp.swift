@@ -6,6 +6,8 @@ enum Main {
     static func main() {
         if CommandLine.arguments.contains("dump") {
             printDump()
+        } else if CommandLine.arguments.contains("setup") {
+            runSetup()
         } else {
             CachewatchApp.main()
         }

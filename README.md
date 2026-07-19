@@ -57,23 +57,13 @@ swift run Cachewatch dump     # one-shot fleet table in the terminal
 
 ### Statusline hookup
 
-Quota and cost come from the JSON Claude Code pipes to its statusline. Install the forwarder:
+Quota and cost come from the JSON Claude Code pipes to its statusline. One command wires it up:
 
 ```sh
-mkdir -p ~/.cachewatch && cp scripts/cachewatch-statusline.sh ~/.cachewatch/ && chmod +x ~/.cachewatch/cachewatch-statusline.sh
+swift run Cachewatch setup
 ```
 
-Then in `~/.claude/settings.json`:
-
-```json
-"statusLine": {
-  "type": "command",
-  "command": "~/.cachewatch/cachewatch-statusline.sh",
-  "refreshInterval": 60
-}
-```
-
-The script also renders a useful statusline (`Opus 4.8 | ctx 73% | 5h 43% | 7d 12%`). If you already have one, set `CACHEWATCH_NEXT_STATUSLINE` to its command and the script chains to it. When Cachewatch is not running the forward is a no-op; your statusline never breaks or slows down.
+This installs the forwarder script to `~/.cachewatch/` and adds it to `~/.claude/settings.json` (with a backup first). Idempotent, and if you already have a statusline it gets chained, not replaced. The script also renders a useful statusline on its own: `Opus 4.8 | ctx 73% | 5h 43% | 7d 12%`. When Cachewatch is not running the forward is a no-op; your statusline never breaks or slows down. New Claude Code sessions pick it up on start.
 
 ## Configuration
 

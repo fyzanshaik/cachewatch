@@ -101,6 +101,7 @@ runCacheMissTests(t)
 runStatusTests(t)
 runCalibrationTests(t)
 runHistoryTests(t)
+runSetupTests(t)
 
 // MARK: - Integration
 
