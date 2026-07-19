@@ -1,0 +1,141 @@
+import SwiftUI
+import CollectorEngine
+
+struct FleetView: View {
+    let model: FleetModel
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(alignment: .leading, spacing: 8) {
+                header(now: context.date)
+                Divider()
+                if model.fleet.sessions.isEmpty {
+                    Text("No live Claude Code sessions")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 12)
+                } else {
+                    ForEach(model.fleet.sessions) { session in
+                        SessionRow(session: session, now: context.date)
+                    }
+                }
+                Divider()
+                HStack {
+                    Text("Cachewatch")
+                        .foregroundStyle(.tertiary)
+                        .font(.caption)
+                    Spacer()
+                    Button("Quit") { NSApplication.shared.terminate(nil) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+            }
+            .padding(12)
+            .frame(width: 380)
+        }
+    }
+
+    @ViewBuilder
+    private func header(now: Date) -> some View {
+        HStack {
+            Text("\(model.fleet.sessions.count) session\(model.fleet.sessions.count == 1 ? "" : "s")")
+                .font(.headline)
+            Spacer()
+            if let limits = model.fleet.rateLimits {
+                QuotaBadge(label: "5h", window: limits.fiveHour, now: now)
+                QuotaBadge(label: "7d", window: limits.sevenDay, now: now)
+            } else {
+                Text("quota: waiting for statusline data")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+private struct QuotaBadge: View {
+    let label: String
+    let window: StatuslinePayload.RateLimitWindow?
+    let now: Date
+
+    var body: some View {
+        if let used = window?.usedPercentage {
+            HStack(spacing: 4) {
+                Text(label).foregroundStyle(.secondary)
+                Text("\(Int(used))%")
+                    .foregroundStyle(used >= 80 ? .red : used >= 60 ? .orange : .primary)
+                    .monospacedDigit()
+            }
+            .font(.caption)
+            .help(window?.resetsAt.map { "resets in \(Format.age(since: now, now: $0))" } ?? "")
+        }
+    }
+}
+
+private struct SessionRow: View {
+    let session: SessionSnapshot
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+                Text(session.name ?? String(session.sessionId.prefix(8)))
+                    .fontWeight(.medium)
+                if let branch = session.gitBranch {
+                    Text(branch)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                cacheBadge
+            }
+            HStack(spacing: 10) {
+                Text(Format.model(session.model))
+                Text("ctx \(Format.tokens(session.contextTokens))")
+                Text(Format.memory(session.memoryBytes))
+                if let cost = session.costUSD, cost > 0 {
+                    Text(cost, format: .currency(code: "USD"))
+                }
+                Spacer()
+                if let last = session.lastTurnAt {
+                    Text("\(Format.age(since: last, now: now)) ago")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var statusColor: Color {
+        switch session.status {
+        case .busy: .green
+        case .waiting: .orange
+        case .idle: .gray
+        case .unknown: .gray.opacity(0.4)
+        }
+    }
+
+    @ViewBuilder
+    private var cacheBadge: some View {
+        switch session.cacheState(at: now) {
+        case .warm(let expiresAt):
+            Text("warm \(Format.countdown(expiresAt.timeIntervalSince(now)))")
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(expiresAt.timeIntervalSince(now) < 120 ? .orange : .green)
+        case .cold:
+            Text("cold")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .unknown:
+            EmptyView()
+        }
+    }
+}

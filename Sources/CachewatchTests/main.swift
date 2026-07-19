@@ -88,4 +88,8 @@ t.run("decodesAPIPayloadWithoutRateLimits") { t in
 
 runReducerTests(t)
 
+// MARK: - Sources
+
+runSourceTests(t)
+
 t.finish()
