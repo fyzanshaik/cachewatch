@@ -9,9 +9,9 @@ import Foundation
 public struct QuotaCalibrator: Sendable, Equatable, Codable {
     private var totalDollars = 0.0
     private var totalPercent = 0.0
-    private var lastCost: Double?
-    private var lastUsedPercentage: Double?
-    private var lastResetsAt: Date?
+    private var anchorCost: Double?
+    private var anchorUsedPercentage: Double?
+    private var anchorResetsAt: Date?
 
     /// Minimum accumulated percent before the fit is trusted.
     private static let minPercentForEstimate = 3.0
@@ -25,22 +25,33 @@ public struct QuotaCalibrator: Sendable, Equatable, Codable {
         return totalDollars / totalPercent
     }
 
+    /// 0...1 progress toward a trusted fit — for "learning quota" UI.
+    public var progress: Double {
+        min(1, totalPercent / Self.minPercentForEstimate)
+    }
+
     public func percentOfWindow(forCost cost: Double) -> Double? {
         dollarsPerPercent.map { cost / $0 }
     }
 
+    /// Anchor-based accumulation: the baseline holds still until burn since the
+    /// anchor clears the noise floor, then the interval is recorded and the anchor
+    /// moves. Comparing consecutive samples instead would reject steady sub-0.5%
+    /// drips forever at 60s sampling.
     public mutating func observe(cumulativeCostUSD: Double, usedPercentage: Double, resetsAt: Date?) {
-        defer {
-            lastCost = cumulativeCostUSD
-            lastUsedPercentage = usedPercentage
-            lastResetsAt = resetsAt
+        guard let anchorCost, let anchorUsedPercentage, anchorResetsAt == resetsAt else {
+            // First sample of a (new) window: plant the anchor.
+            anchorCost = cumulativeCostUSD
+            anchorUsedPercentage = usedPercentage
+            anchorResetsAt = resetsAt
+            return
         }
-        guard let lastCost, let lastUsedPercentage,
-              lastResetsAt == resetsAt,  // same 5h window, else the % baseline moved
-              usedPercentage > lastUsedPercentage + Self.minPercentDelta,
-              cumulativeCostUSD > lastCost
+        guard usedPercentage >= anchorUsedPercentage + Self.minPercentDelta,
+              cumulativeCostUSD > anchorCost
         else { return }
-        totalDollars += cumulativeCostUSD - lastCost
-        totalPercent += usedPercentage - lastUsedPercentage
+        totalDollars += cumulativeCostUSD - anchorCost
+        totalPercent += usedPercentage - anchorUsedPercentage
+        self.anchorCost = cumulativeCostUSD
+        self.anchorUsedPercentage = usedPercentage
     }
 }

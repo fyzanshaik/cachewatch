@@ -22,6 +22,12 @@ struct FleetView: View {
                 Divider()
                 HStack {
                     memorySummary
+                    if model.fleet.rateLimits != nil, model.fleet.calibration.dollarsPerPercent == nil {
+                        Text("· learning quota \(Int(model.fleet.calibration.progress * 100))%")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .help("Cachewatch is fitting how tokens map to your Plan's 5h window by watching real burn. Cold-session estimates switch from dollars to % when done.")
+                    }
                     Spacer()
                     Button("Test alert") { model.alertCenter.deliverTest() }
                         .buttonStyle(.plain)
