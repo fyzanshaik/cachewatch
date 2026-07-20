@@ -1,14 +1,19 @@
 # Releasing Cachewatch
 
-Cachewatch's tag workflow signs the native app with a Developer ID Application
-certificate, submits it to Apple's notary service, staples the ticket, verifies
-the result with Gatekeeper, publishes the GitHub release, and opens the Homebrew
-tap update pull request. Publication does not start unless every signing and
-notarization check passes.
+Cachewatch supports two release modes. Without Apple credentials, the tag
+workflow publishes an ad-hoc signed release and the installation instructions
+disclose the required one-time Gatekeeper approval. If all Apple credentials are
+configured, the workflow instead signs the native app with a Developer ID
+Application certificate, submits it to Apple's notary service, staples the
+ticket, and verifies the result with Gatekeeper before publication. Both modes
+publish the GitHub release and open the Homebrew tap update pull request.
 
 ## One-time Apple setup
 
-The release owner needs an active Apple Developer Program membership.
+Notarized releases are optional. Enabling them requires an active Apple
+Developer Program membership. If the project does not maintain a membership,
+leave all five Apple secrets unset; partially configuring them fails the release
+to prevent an ambiguous signing state.
 
 1. In Xcode, open **Settings > Accounts**, add the release Apple ID, and select
    the Developer Program team.
@@ -50,13 +55,20 @@ scripts/test-release-package.sh \
 ```
 
 Then push an annotated `vX.Y.Z` tag. The release workflow is the only supported
-publication path. After it completes, install the public cask on a clean Mac and
-confirm that this command succeeds without a Gatekeeper override:
+publication path. After it completes, install the public cask on a clean Mac:
 
 ```sh
 brew install --cask fyzanshaik/tap/cachewatch
-spctl --assess --type execute --verbose=4 /Applications/Cachewatch.app
 open -a Cachewatch
 ```
 
-Do not close a Gatekeeper release issue until the public cask passes that check.
+For a notarized release, confirm that Gatekeeper accepts it without an override:
+
+```sh
+spctl --assess --type execute --verbose=4 /Applications/Cachewatch.app
+```
+
+For an ad-hoc signed release, confirm that Homebrew prints the disclaimer and
+that the **Privacy & Security > Open Anyway** instructions work. Do not close a
+Gatekeeper release issue as fixed unless a notarized public cask passes the
+first check.
