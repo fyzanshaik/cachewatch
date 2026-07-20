@@ -75,7 +75,9 @@ notifications and expose a launch-at-login toggle; bare `swift run` builds keep
 the `osascript` notification fallback.
 
 The native app archive and a standalone arm64 command-line binary are attached
-to each [release](https://github.com/fyzanshaik/cachewatch/releases).
+to each [release](https://github.com/fyzanshaik/cachewatch/releases). Maintainer
+instructions for Developer ID signing and notarization are in
+[docs/releasing.md](docs/releasing.md).
 
 ### Statusline hookup
 

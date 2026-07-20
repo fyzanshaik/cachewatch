@@ -14,11 +14,27 @@ derived_data="${TMPDIR:-/tmp}/cachewatch-release-${version}"
 app_zip="$output_dir/Cachewatch-${version}-macos-arm64.zip"
 cli_archive="$output_dir/cachewatch-${version}-macos-arm64.tar.gz"
 checksums="$output_dir/SHA256SUMS"
+signing_identity="${CACHEWATCH_CODE_SIGN_IDENTITY:--}"
 
 validate_release_version "$version"
 
 mkdir -p "$output_dir"
 rm -f "$app_zip" "$cli_archive" "$checksums"
+
+build_settings=(
+  "MARKETING_VERSION=$version"
+  "CODE_SIGN_IDENTITY=$signing_identity"
+)
+
+if [[ "$signing_identity" != "-" ]]; then
+  require_environment_variables CACHEWATCH_DEVELOPMENT_TEAM
+  build_settings+=(
+    "CODE_SIGN_STYLE=Manual"
+    "DEVELOPMENT_TEAM=$CACHEWATCH_DEVELOPMENT_TEAM"
+    "ENABLE_HARDENED_RUNTIME=YES"
+    "OTHER_CODE_SIGN_FLAGS=--timestamp"
+  )
+fi
 
 xcodebuild -quiet \
   -project "$repo_root/Cachewatch.xcodeproj" \
@@ -26,8 +42,7 @@ xcodebuild -quiet \
   -destination "platform=macOS,arch=arm64" \
   -configuration Release \
   -derivedDataPath "$derived_data" \
-  MARKETING_VERSION="$version" \
-  CODE_SIGN_IDENTITY=- \
+  "${build_settings[@]}" \
   clean build
 
 app="$derived_data/Build/Products/Release/Cachewatch.app"
@@ -46,10 +61,7 @@ codesign --verify --deep --strict "$app"
 bin_path="$(/usr/bin/swift build --package-path "$repo_root" -c release --triple arm64-apple-macosx15.0 --show-bin-path)"
 /usr/bin/tar -C "$bin_path" -czf "$cli_archive" Cachewatch
 
-(
-  cd "$output_dir"
-  /usr/bin/shasum -a 256 "$(basename "$app_zip")" "$(basename "$cli_archive")" > "$(basename "$checksums")"
-)
+write_release_checksums "$output_dir" "$version"
 
 echo "$app_zip"
 echo "$cli_archive"
