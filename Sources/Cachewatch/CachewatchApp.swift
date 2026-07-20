@@ -4,13 +4,34 @@ import CollectorEngine
 @main
 enum Main {
     static func main() {
-        if CommandLine.arguments.contains("dump") {
+        if CommandLine.arguments.contains("--version") {
+            print(packagedVersion ?? "development")
+        } else if CommandLine.arguments.contains("dump") {
             printDump()
         } else if CommandLine.arguments.contains("setup") {
             runSetup()
         } else {
             CachewatchApp.main()
         }
+    }
+
+    private static var packagedVersion: String? {
+        if let version = ProcessInfo.processInfo.environment["CACHEWATCH_VERSION"] {
+            return version
+        }
+        let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+        let plist = enclosingAppInfoPlist(for: executable)
+        guard let data = try? Data(contentsOf: plist),
+              let dictionary = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return nil }
+        return dictionary["CFBundleShortVersionString"] as? String
+    }
+
+    private static func enclosingAppInfoPlist(for executable: URL) -> URL {
+        executable
+            .deletingLastPathComponent() // MacOS
+            .deletingLastPathComponent() // Contents
+            .appending(path: "Info.plist")
     }
 }
 

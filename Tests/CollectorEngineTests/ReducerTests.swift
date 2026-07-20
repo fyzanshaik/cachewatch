@@ -1,7 +1,9 @@
 import Foundation
+import Testing
 import CollectorEngine
 
-func runReducerTests(_ t: TestKit) {
+@Suite
+struct ReducerTests {
     let base = Date(timeIntervalSince1970: 1_784_500_000)
 
     func registryEntry(pid: Int32 = 100, sessionId: String = "sess-a") throws -> SessionRegistryEntry {
@@ -26,29 +28,32 @@ func runReducerTests(_ t: TestKit) {
         )
     }
 
-    t.run("registrySnapshotPopulatesFleet") { t in
+    @Test
+    func registrySnapshotPopulatesFleet() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         let fleet = reducer.snapshot
-        t.expectEqual(fleet.sessions.count, 1, "session count")
-        t.expectEqual(fleet.sessions.first?.sessionId, "sess-a", "sessionId")
-        t.expectEqual(fleet.sessions.first?.name, "project-x1", "name")
-        t.expectEqual(fleet.sessions.first?.status, .idle, "status")
+        #expect(fleet.sessions.count == 1, "session count")
+        #expect(fleet.sessions.first?.sessionId == "sess-a", "sessionId")
+        #expect(fleet.sessions.first?.name == "project-x1", "name")
+        #expect(fleet.sessions.first?.status == .idle, "status")
     }
 
-    t.run("mainTurnEnrichesSession") { t in
+    @Test
+    func mainTurnEnrichesSession() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(mainTurn(at: base)))
         let s = reducer.snapshot.sessions[0]
-        t.expectEqual(s.model, "claude-opus-4-8", "model")
-        t.expectEqual(s.gitBranch, "main", "branch")
-        t.expectEqual(s.contextTokens, 200_510, "context")
-        t.expectEqual(s.lastTurnAt, base, "lastTurnAt")
-        t.expectEqual(s.cacheTTL, .oneHour, "ttl")
+        #expect(s.model == "claude-opus-4-8", "model")
+        #expect(s.gitBranch == "main", "branch")
+        #expect(s.contextTokens == 200_510, "context")
+        #expect(s.lastTurnAt == base, "lastTurnAt")
+        #expect(s.cacheTTL == .oneHour, "ttl")
     }
 
-    t.run("sidechainTurnDoesNotOverwriteMainContext") { t in
+    @Test
+    func sidechainTurnDoesNotOverwriteMainContext() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(mainTurn(at: base)))
@@ -61,29 +66,32 @@ func runReducerTests(_ t: TestKit) {
         )
         reducer.apply(.assistantTurn(side))
         let s = reducer.snapshot.sessions[0]
-        t.expectEqual(s.contextTokens, 200_510, "context unchanged")
-        t.expectEqual(s.model, "claude-opus-4-8", "model unchanged")
-        t.expectEqual(s.cacheTTL, .oneHour, "ttl unchanged")
+        #expect(s.contextTokens == 200_510, "context unchanged")
+        #expect(s.model == "claude-opus-4-8", "model unchanged")
+        #expect(s.cacheTTL == .oneHour, "ttl unchanged")
     }
 
-    t.run("cacheStateWarmThenCold") { t in
+    @Test
+    func cacheStateWarmThenCold() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(mainTurn(at: base)))
         let s = reducer.snapshot.sessions[0]
         let during = s.cacheState(at: base.addingTimeInterval(30 * 60))
-        t.expectEqual(during, .warm(expiresAt: base.addingTimeInterval(60 * 60)), "warm mid-TTL")
+        #expect(during == .warm(expiresAt: base.addingTimeInterval(60 * 60)), "warm mid-TTL")
         let after = s.cacheState(at: base.addingTimeInterval(61 * 60))
-        t.expectEqual(after, .cold, "cold after TTL")
+        #expect(after == .cold, "cold after TTL")
     }
 
-    t.run("cacheStateUnknownWithoutTurns") { t in
+    @Test
+    func cacheStateUnknownWithoutTurns() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
-        t.expectEqual(reducer.snapshot.sessions[0].cacheState(at: base), .unknown, "unknown")
+        #expect(reducer.snapshot.sessions[0].cacheState(at: base) == .unknown, "unknown")
     }
 
-    t.run("statuslineEnrichesSessionAndGlobalRateLimits") { t in
+    @Test
+    func statuslineEnrichesSessionAndGlobalRateLimits() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         let json = """
@@ -92,34 +100,37 @@ func runReducerTests(_ t: TestKit) {
         let payload = try StatuslinePayload.decode(from: Data(json.utf8))
         reducer.apply(.statusline(payload, receivedAt: base))
         let fleet = reducer.snapshot
-        t.expectEqual(fleet.sessions[0].costUSD, 1.25, "cost")
-        t.expectEqual(fleet.sessions[0].contextUsedPercentage, 63.0, "context %")
-        t.expectEqual(fleet.rateLimits?.fiveHour?.usedPercentage, 40.0, "5h %")
-        t.expectEqual(fleet.rateLimitsAsOf, base, "rate limits timestamp")
+        #expect(fleet.sessions[0].costUSD == 1.25, "cost")
+        #expect(fleet.sessions[0].contextUsedPercentage == 63.0, "context %")
+        #expect(fleet.rateLimits?.fiveHour?.usedPercentage == 40.0, "5h %")
+        #expect(fleet.rateLimitsAsOf == base, "rate limits timestamp")
     }
 
-    t.run("memorySampleMapsByPid") { t in
+    @Test
+    func memorySampleMapsByPid() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry(pid: 4242)]))
         reducer.apply(.memorySample(pid: 4242, residentBytes: 800_000_000))
-        t.expectEqual(reducer.snapshot.sessions[0].memoryBytes, 800_000_000, "memory")
+        #expect(reducer.snapshot.sessions[0].memoryBytes == 800_000_000, "memory")
     }
 
-    t.run("sessionRemovedFromRegistryDisappearsButEnrichmentSurvivesReappearance") { t in
+    @Test
+    func sessionRemovedFromRegistryDisappearsButEnrichmentSurvivesReappearance() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(mainTurn(at: base)))
         reducer.apply(.registrySnapshot([]))
-        t.expectEqual(reducer.snapshot.sessions.count, 0, "gone after removal")
+        #expect(reducer.snapshot.sessions.count == 0, "gone after removal")
         reducer.apply(.registrySnapshot([try registryEntry()]))
-        t.expectEqual(reducer.snapshot.sessions[0].contextTokens, 200_510, "enrichment retained")
+        #expect(reducer.snapshot.sessions[0].contextTokens == 200_510, "enrichment retained")
     }
 
-    t.run("turnForUnknownSessionIsKeptUntilRegistryCatchesUp") { t in
+    @Test
+    func turnForUnknownSessionIsKeptUntilRegistryCatchesUp() throws {
         var reducer = FleetReducer()
         reducer.apply(.assistantTurn(mainTurn(at: base)))
-        t.expectEqual(reducer.snapshot.sessions.count, 0, "nothing shown yet")
+        #expect(reducer.snapshot.sessions.count == 0, "nothing shown yet")
         reducer.apply(.registrySnapshot([try registryEntry()]))
-        t.expectEqual(reducer.snapshot.sessions[0].model, "claude-opus-4-8", "turn data joined late")
+        #expect(reducer.snapshot.sessions[0].model == "claude-opus-4-8", "turn data joined late")
     }
 }

@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate tap credentials
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "TAP_GITHUB_TOKEN must have contents and pull-request access to fyzanshaik/homebrew-tap" >&2
+            exit 1
+          fi
+          if [[ "$(gh api repos/fyzanshaik/homebrew-tap --jq '.permissions.push')" != "true" ]]; then
+            echo "TAP_GITHUB_TOKEN cannot push to fyzanshaik/homebrew-tap" >&2
+            exit 1
+          fi
+
+      - name: Verify
+        run: swift test
+
+      - name: Build release packages
+        run: scripts/package-release.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/dist"
+
+      - name: Test native app archive
+        run: scripts/test-release-package.sh "$RUNNER_TEMP/dist/Cachewatch-${GITHUB_REF_NAME#v}-macos-arm64.zip" "$GITHUB_REF_NAME"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP"/dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --generate-notes \
+              --verify-tag
+          fi
+
+      - name: Render Homebrew cask
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          app_sha="$(shasum -a 256 "$RUNNER_TEMP/dist/Cachewatch-${version}-macos-arm64.zip" | awk '{print $1}')"
+          cli_sha="$(shasum -a 256 "$RUNNER_TEMP/dist/cachewatch-${version}-macos-arm64.tar.gz" | awk '{print $1}')"
+          scripts/render-homebrew-cask.sh "$version" "$app_sha" "$RUNNER_TEMP/cachewatch-cask.rb"
+          scripts/render-homebrew-formula.sh "$version" "$cli_sha" "$RUNNER_TEMP/cachewatch-formula.rb"
+
+      - name: Open tap update pull request
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          branch="cachewatch-${version}"
+          gh auth setup-git
+          gh repo clone fyzanshaik/homebrew-tap "$RUNNER_TEMP/homebrew-tap"
+          cd "$RUNNER_TEMP/homebrew-tap"
+          mkdir -p Casks Formula
+          cp "$RUNNER_TEMP/cachewatch-cask.rb" Casks/cachewatch.rb
+          cp "$RUNNER_TEMP/cachewatch-formula.rb" Formula/cachewatch.rb
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/cachewatch.rb Formula/cachewatch.rb
+          git commit -m "Update Cachewatch to ${version}"
+          git push origin "$branch"
+          gh pr create \
+            --repo fyzanshaik/homebrew-tap \
+            --base main \
+            --head "$branch" \
+            --title "Update Cachewatch to ${version}" \
+            --body "Generated from fyzanshaik/cachewatch ${GITHUB_REF_NAME}."

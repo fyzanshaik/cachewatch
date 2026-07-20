@@ -1,0 +1,22 @@
+class Cachewatch < Formula
+  desc "Menu bar observability for Claude Code sessions: cache TTLs, quota, memory"
+  homepage "https://github.com/fyzanshaik/cachewatch"
+  url "https://github.com/fyzanshaik/cachewatch/releases/download/v@VERSION@/cachewatch-@VERSION@-macos-arm64.tar.gz"
+  sha256 "@SHA256@"
+  license "MIT"
+
+  depends_on arch: :arm64
+  depends_on macos: :sequoia
+
+  def install
+    libexec.install "Cachewatch"
+    (bin/"cachewatch").write <<~SH
+      #!/bin/bash
+      CACHEWATCH_VERSION="#{version}" exec "#{libexec}/Cachewatch" "$@"
+    SH
+  end
+
+  test do
+    assert_equal version.to_s, shell_output("#{bin}/cachewatch --version").strip
+  end
+end
