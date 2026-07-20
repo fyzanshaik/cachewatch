@@ -5,7 +5,7 @@ macOS menu bar app observing all local Claude Code sessions: fleet status, promp
 ## Commands
 
 - `swift build` — build everything.
-- `swift run cachewatch-tests` — THE test suite until issue #2 ports it to Swift Testing. The plain-assertion runner lives in `Sources/CachewatchTests`; `Tests/CollectorEngineTests/` is a stale XCTest copy, so don't extend it.
+- `swift test` — the canonical Swift Testing suite in `Tests/CollectorEngineTests`.
 - `swift run Cachewatch` — the menu bar app. `swift run Cachewatch dump` — one-shot fleet table, the fastest way to verify engine changes against real data.
 - `xcodebuild -project Cachewatch.xcodeproj -scheme Cachewatch -destination 'platform=macOS,arch=arm64' build` — build the native `.app` target.
 
@@ -27,7 +27,7 @@ macOS menu bar app observing all local Claude Code sessions: fleet status, promp
 
 ## Conventions
 
-- TDD: add the failing case to the runner first. Fixtures in `Tests/CollectorEngineTests/Fixtures/` mirror REAL captured payloads — when Claude Code changes formats, update fixtures from a fresh capture, not from documentation.
+- TDD: add the failing Swift Testing case first. Fixtures in `Tests/CollectorEngineTests/Fixtures/` mirror REAL captured payloads — when Claude Code changes formats, update fixtures from a fresh capture, not from documentation.
 - Editing `scripts/cachewatch-statusline.sh` requires re-copying to `~/.cachewatch/` (the installed copy is what runs).
 - `Pricing.swift` holds API list prices; verify against the pricing docs when touched.
 - No emojis anywhere. Commits: one-line, no attribution trailers.

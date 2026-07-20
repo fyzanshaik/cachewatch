@@ -18,11 +18,5 @@ let package = Package(
             dependencies: ["CollectorEngine"],
             resources: [.copy("Fixtures")]
         ),
-        // Interim runner until issue #2 ports the canonical cases to Swift Testing.
-        .executableTarget(
-            name: "cachewatch-tests",
-            dependencies: ["CollectorEngine"],
-            path: "Sources/CachewatchTests"
-        ),
     ]
 )

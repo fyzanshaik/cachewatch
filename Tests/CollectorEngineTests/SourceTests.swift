@@ -1,35 +1,40 @@
 import Foundation
+import Testing
 import CollectorEngine
 
-func runSourceTests(_ t: TestKit) {
+@Suite
+struct SourceTests {
     // MARK: - Process tree memory
 
-    t.run("subtreeRSSSumsSessionAndDescendants") { t in
+    @Test
+    func subtreeRSSSumsSessionAndDescendants() throws {
         let table: [ProcessSample] = [
             ProcessSample(pid: 100, ppid: 1, rssBytes: 500_000_000),   // session
             ProcessSample(pid: 200, ppid: 100, rssBytes: 120_000_000), // mcp server
             ProcessSample(pid: 300, ppid: 200, rssBytes: 30_000_000),  // mcp child
             ProcessSample(pid: 999, ppid: 1, rssBytes: 999_000_000),   // unrelated
         ]
-        t.expectEqual(ProcessTree.subtreeRSS(of: 100, in: table), 650_000_000, "subtree sum")
-        t.expectEqual(ProcessTree.subtreeRSS(of: 999, in: table), 999_000_000, "leaf")
-        t.expectEqual(ProcessTree.subtreeRSS(of: 777, in: table), 0, "unknown pid")
+        #expect(ProcessTree.subtreeRSS(of: 100, in: table) == 650_000_000, "subtree sum")
+        #expect(ProcessTree.subtreeRSS(of: 999, in: table) == 999_000_000, "leaf")
+        #expect(ProcessTree.subtreeRSS(of: 777, in: table) == 0, "unknown pid")
     }
 
-    t.run("parsesPsOutput") { t in
+    @Test
+    func parsesPsOutput() throws {
         let ps = """
           100     1  488281
           200   100  117187
         badline
         """
         let samples = ProcessTree.parsePS(ps)
-        t.expectEqual(samples.count, 2, "row count")
-        t.expectEqual(samples.first?.rssBytes, 488_281 * 1024, "rss kb to bytes")
+        #expect(samples.count == 2, "row count")
+        #expect(samples.first?.rssBytes == 488_281 * 1024, "rss kb to bytes")
     }
 
     // MARK: - Registry scanning
 
-    t.run("registryScanFiltersDeadPids") { t in
+    @Test
+    func registryScanFiltersDeadPids() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "cw-reg-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -43,13 +48,14 @@ func runSourceTests(_ t: TestKit) {
         try Data("garbage".utf8).write(to: dir.appending(path: "broken.json"))
 
         let entries = RegistryScanner.scan(directory: dir, isAlive: { $0 == 101 })
-        t.expectEqual(entries.count, 1, "only live sessions")
-        t.expectEqual(entries.first?.sessionId, "alive", "live session id")
+        #expect(entries.count == 1, "only live sessions")
+        #expect(entries.first?.sessionId == "alive", "live session id")
     }
 
     // MARK: - Transcript tailing
 
-    t.run("tailerEmitsOnlyNewCompleteLines") { t in
+    @Test
+    func tailerEmitsOnlyNewCompleteLines() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "cw-tail-\(UUID().uuidString)")
         let projectDir = dir.appending(path: "-tmp-project")
         try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
@@ -65,21 +71,21 @@ func runSourceTests(_ t: TestKit) {
         var tailer = TranscriptTailer(directory: dir)
         try Data((turnLine("2026-07-19T10:00:00.000Z") + "\n").utf8).write(to: file)
         let first = tailer.poll()
-        t.expectEqual(first.count, 1, "first poll emits one turn")
+        #expect(first.count == 1, "first poll emits one turn")
 
-        t.expectEqual(tailer.poll().count, 0, "no re-emission without new data")
+        #expect(tailer.poll().count == 0, "no re-emission without new data")
 
         let handle = try FileHandle(forWritingTo: file)
         handle.seekToEndOfFile()
         handle.write(Data((turnLine("2026-07-19T10:01:00.000Z") + "\n" + "{\"partial").utf8))
         try handle.close()
         let second = tailer.poll()
-        t.expectEqual(second.count, 1, "only the complete new line")
+        #expect(second.count == 1, "only the complete new line")
 
         let handle2 = try FileHandle(forWritingTo: file)
         handle2.seekToEndOfFile()
         handle2.write(Data("-line\":1}\n".utf8))
         try handle2.close()
-        t.expectEqual(tailer.poll().count, 0, "completed partial line is not an assistant turn")
+        #expect(tailer.poll().count == 0, "completed partial line is not an assistant turn")
     }
 }

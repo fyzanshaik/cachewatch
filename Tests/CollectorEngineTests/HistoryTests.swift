@@ -1,7 +1,9 @@
 import Foundation
+import Testing
 import CollectorEngine
 
-func runHistoryTests(_ t: TestKit) {
+@Suite
+struct HistoryTests {
     let base = Date(timeIntervalSince1970: 1_785_100_000)
 
     func tempStore() -> QuotaHistoryStore {
@@ -20,18 +22,20 @@ func runHistoryTests(_ t: TestKit) {
         )
     }
 
-    t.run("appendsAndLoadsSamples") { t in
+    @Test
+    func appendsAndLoadsSamples() throws {
         let store = tempStore()
         defer { try? FileManager.default.removeItem(at: store.fileURL) }
         store.append(sample(at: base, used: 10))
         store.append(sample(at: base.addingTimeInterval(60), used: 12))
         let loaded = store.load()
-        t.expectEqual(loaded.count, 2, "two samples")
-        t.expectEqual(loaded.first?.fiveHourUsedPercentage, 10, "first sample")
-        t.expectEqual(loaded.last?.recordedAt, base.addingTimeInterval(60), "ordering")
+        #expect(loaded.count == 2, "two samples")
+        #expect(loaded.first?.fiveHourUsedPercentage == 10, "first sample")
+        #expect(loaded.last?.recordedAt == base.addingTimeInterval(60), "ordering")
     }
 
-    t.run("pruneDropsOldEntriesAndSurvivesGarbageLines") { t in
+    @Test
+    func pruneDropsOldEntriesAndSurvivesGarbageLines() throws {
         let store = tempStore()
         defer { try? FileManager.default.removeItem(at: store.fileURL) }
         store.append(sample(at: base.addingTimeInterval(-40 * 86_400), used: 5))
@@ -40,8 +44,8 @@ func runHistoryTests(_ t: TestKit) {
         store.append(sample(at: base, used: 9))
         store.prune(olderThan: 30 * 86_400, now: base)
         let kept = store.load()
-        t.expectEqual(kept.count, 2, "old and garbage dropped")
-        t.expectEqual(kept.first?.fiveHourUsedPercentage, 7, "recent kept")
+        #expect(kept.count == 2, "old and garbage dropped")
+        #expect(kept.first?.fiveHourUsedPercentage == 7, "recent kept")
     }
 }
 

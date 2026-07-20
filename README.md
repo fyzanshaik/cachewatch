@@ -47,13 +47,17 @@ One reducer turns all of it into an immutable fleet snapshot; the UI just render
 
 ## Install
 
-Needs macOS 15+. Command Line Tools are enough, no Xcode required.
+Needs macOS 15+ on Apple silicon. No compiler or Xcode is required.
 
 ```sh
-brew install fyzanshaik/tap/cachewatch
+brew install --cask fyzanshaik/tap/cachewatch
 cachewatch setup    # wires the statusline forwarder, backs up settings first
-cachewatch          # menu bar app
+open -a Cachewatch  # launches the menu bar app
 ```
+
+The cask installs the native app in `/Applications` and exposes its command-line
+entry point as `cachewatch`. Until the release is Developer ID notarized,
+right-click Cachewatch and choose Open on the first launch if Gatekeeper blocks it.
 
 Or from source:
 
@@ -70,7 +74,8 @@ files and local `CollectorEngine` package as SwiftPM. Bundled builds use native
 notifications and expose a launch-at-login toggle; bare `swift run` builds keep
 the `osascript` notification fallback.
 
-A prebuilt arm64 binary is also attached to each [release](https://github.com/fyzanshaik/cachewatch/releases).
+The native app archive and a standalone arm64 command-line binary are attached
+to each [release](https://github.com/fyzanshaik/cachewatch/releases).
 
 ### Statusline hookup
 
@@ -91,7 +96,7 @@ This installs the forwarder script to `~/.cachewatch/` and adds it to `~/.claude
 ## Development
 
 ```sh
-swift run cachewatch-tests
+swift test
 xcodebuild -project Cachewatch.xcodeproj -scheme Cachewatch \
   -destination 'platform=macOS,arch=arm64' build
 ```

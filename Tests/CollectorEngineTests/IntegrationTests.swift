@@ -1,14 +1,17 @@
 import Foundation
+import Testing
 import CollectorEngine
 
 /// End-to-end: statusline JSON piped through the real forwarder script over the
 /// real unix socket into StatuslineListener. Guards against nc/EOF deadlocks.
-func runIntegrationTests(_ t: TestKit) {
-    t.run("forwarderScriptDeliversPayloadToListener") { t in
+@Suite
+struct IntegrationTests {
+    @Test
+    func forwarderScriptDeliversPayloadToListener() throws {
         let repoRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let script = repoRoot.appending(path: "scripts/cachewatch-statusline.sh").path
-        let fixturePath = repoRoot.appending(path: "Tests/CollectorEngineTests/Fixtures/statusline-plan.json").path
+        let fixturePath = fixtureURL("statusline-plan.json").path
         let sock = FileManager.default.temporaryDirectory.appending(path: "cw-\(UUID().uuidString.prefix(8)).sock").path
 
         let received = DispatchSemaphore(value: 0)
@@ -31,8 +34,8 @@ func runIntegrationTests(_ t: TestKit) {
         process.waitUntilExit()
 
         let outcome = received.wait(timeout: .now() + 5)
-        t.expect(outcome == .success, "payload arrived within 5s")
-        t.expectEqual(payload?.rateLimits?.fiveHour?.usedPercentage, 43.0, "5h quota decoded")
+        #expect(outcome == .success, "payload arrived within 5s")
+        #expect(payload?.rateLimits?.fiveHour?.usedPercentage == 43.0, "5h quota decoded")
         unlink(sock)
     }
 }

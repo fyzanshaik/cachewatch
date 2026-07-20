@@ -1,7 +1,9 @@
 import Foundation
+import Testing
 import CollectorEngine
 
-func runPricingTests(_ t: TestKit) {
+@Suite
+struct PricingTests {
     let now = Date(timeIntervalSince1970: 1_784_800_000)
 
     func coldSession(model: String, context: Int, ttl: CacheTTL = .oneHour) -> SessionSnapshot {
@@ -16,28 +18,31 @@ func runPricingTests(_ t: TestKit) {
         return s
     }
 
-    t.run("costToResumeUsesModelRateAndTTLWriteMultiplier") { t in
+    @Test
+    func costToResumeUsesModelRateAndTTLWriteMultiplier() throws {
         // opus 4.8: $5/MTok base; 1h TTL rewrite = 2x → 400k tokens = 400_000/1M * 5 * 2 = $4.0
         let opus = Pricing.costToResume(for: coldSession(model: "claude-opus-4-8", context: 400_000), at: now)
-        t.expectEqual(opus, 4.0, "opus 1h rewrite")
+        #expect(opus == 4.0, "opus 1h rewrite")
         // haiku 4.5: $1/MTok; 5m TTL = 1.25x → 100k = 0.125
         let haiku = Pricing.costToResume(for: coldSession(model: "claude-haiku-4-5-20251001", context: 100_000, ttl: .fiveMinutes), at: now)
-        t.expectEqual(haiku, 0.125, "haiku 5m rewrite")
+        #expect(haiku == 0.125, "haiku 5m rewrite")
     }
 
-    t.run("costToResumeNilWhenWarmOrUnknown") { t in
+    @Test
+    func costToResumeNilWhenWarmOrUnknown() throws {
         var warm = coldSession(model: "claude-opus-4-8", context: 400_000)
         warm.lastTurnAt = now.addingTimeInterval(-60)
-        t.expect(Pricing.costToResume(for: warm, at: now) == nil, "warm session has no resume cost")
+        #expect(Pricing.costToResume(for: warm, at: now) == nil, "warm session has no resume cost")
 
         var unknownModel = coldSession(model: "claude-mystery-9", context: 400_000)
-        t.expect(Pricing.costToResume(for: unknownModel, at: now) == nil, "unknown model rate")
+        #expect(Pricing.costToResume(for: unknownModel, at: now) == nil, "unknown model rate")
         unknownModel.model = nil
-        t.expect(Pricing.costToResume(for: unknownModel, at: now) == nil, "missing model")
+        #expect(Pricing.costToResume(for: unknownModel, at: now) == nil, "missing model")
     }
 }
 
-func runCacheMissTests(_ t: TestKit) {
+@Suite
+struct CacheMissTests {
     let base = Date(timeIntervalSince1970: 1_784_810_000)
 
     func turn(at date: Date, read: Int, write: Int, ttl1h: Bool = true) -> AssistantTurn {
@@ -58,49 +63,54 @@ func runCacheMissTests(_ t: TestKit) {
         """.utf8))
     }
 
-    t.run("fullRewriteInsideTTLIsASilentMiss") { t in
+    @Test
+    func fullRewriteInsideTTLIsASilentMiss() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1000)))
         // 10 minutes later — 1h cache should be warm, yet the turn rewrote everything.
         reducer.apply(.assistantTurn(turn(at: base.addingTimeInterval(600), read: 0, write: 201_000)))
         let s = reducer.snapshot.sessions[0]
-        t.expectEqual(s.lastCacheMissAt, base.addingTimeInterval(600), "miss recorded")
+        #expect(s.lastCacheMissAt == base.addingTimeInterval(600), "miss recorded")
     }
 
-    t.run("rewriteAfterTTLExpiryIsNotAMiss") { t in
+    @Test
+    func rewriteAfterTTLExpiryIsNotAMiss() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1000)))
         reducer.apply(.assistantTurn(turn(at: base.addingTimeInterval(2 * 3600), read: 0, write: 201_000)))
-        t.expect(reducer.snapshot.sessions[0].lastCacheMissAt == nil, "expected rewrite, no miss")
+        #expect(reducer.snapshot.sessions[0].lastCacheMissAt == nil, "expected rewrite, no miss")
     }
 
-    t.run("normalWarmTurnIsNotAMiss") { t in
+    @Test
+    func normalWarmTurnIsNotAMiss() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1000)))
         reducer.apply(.assistantTurn(turn(at: base.addingTimeInterval(600), read: 201_000, write: 2000)))
-        t.expect(reducer.snapshot.sessions[0].lastCacheMissAt == nil, "warm read, no miss")
+        #expect(reducer.snapshot.sessions[0].lastCacheMissAt == nil, "warm read, no miss")
     }
 
-    t.run("cacheMissFiresAlertOncePerMiss") { t in
+    @Test
+    func cacheMissFiresAlertOncePerMiss() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1000)))
         reducer.apply(.assistantTurn(turn(at: base.addingTimeInterval(600), read: 0, write: 201_000)))
         var fired: Set<String> = []
         let alerts = AlertEngine.evaluate(fleet: reducer.snapshot, config: .default, now: base.addingTimeInterval(700), alreadyFired: fired)
-        t.expectEqual(alerts.count, 1, "miss alert fires")
-        t.expect(alerts[0].key.hasPrefix("miss-sess-a"), "miss key")
+        #expect(alerts.count == 1, "miss alert fires")
+        #expect(alerts[0].key.hasPrefix("miss-sess-a"), "miss key")
         fired.formUnion(alerts.map(\.key))
-        t.expectEqual(AlertEngine.evaluate(fleet: reducer.snapshot, config: .default, now: base.addingTimeInterval(800), alreadyFired: fired).count, 0, "deduped")
+        #expect(AlertEngine.evaluate(fleet: reducer.snapshot, config: .default, now: base.addingTimeInterval(800), alreadyFired: fired).count == 0, "deduped")
     }
 
-    t.run("oldAlertConfigWithoutCacheMissFieldStillDecodes") { t in
+    @Test
+    func oldAlertConfigWithoutCacheMissFieldStillDecodes() throws {
         let legacy = #"{"schemaVersion":1,"alerts":{"notificationsEnabled":true,"quota":{"enabled":true,"thresholdPercentage":80},"cacheExpiry":{"enabled":true,"warningSeconds":90,"minContextTokens":50000},"longIdle":{"enabled":true,"idleHours":6,"minContextTokens":100000,"minMemoryBytes":500000000}},"firedAlertKeys":["kept"]}"#
         let state = try AppState.decode(from: Data(legacy.utf8))
-        t.expectEqual(state.firedAlertKeys, ["kept"], "fired keys preserved")
-        t.expectEqual(state.alerts.cacheMiss.enabled, true, "new field defaults on")
+        #expect(state.firedAlertKeys == ["kept"], "fired keys preserved")
+        #expect(state.alerts.cacheMiss.enabled == true, "new field defaults on")
     }
 }
