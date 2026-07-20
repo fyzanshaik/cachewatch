@@ -4,6 +4,9 @@ import PackageDescription
 let package = Package(
     name: "Cachewatch",
     platforms: [.macOS(.v15)],
+    products: [
+        .library(name: "CollectorEngine", targets: ["CollectorEngine"]),
+    ],
     targets: [
         .target(name: "CollectorEngine"),
         .executableTarget(
@@ -15,8 +18,7 @@ let package = Package(
             dependencies: ["CollectorEngine"],
             resources: [.copy("Fixtures")]
         ),
-        // Interim runner until Xcode (and with it XCTest/Swift Testing) is installed:
-        // `swift run cachewatch-tests` executes the same cases with plain assertions.
+        // Interim runner until issue #2 ports the canonical cases to Swift Testing.
         .executableTarget(
             name: "cachewatch-tests",
             dependencies: ["CollectorEngine"],

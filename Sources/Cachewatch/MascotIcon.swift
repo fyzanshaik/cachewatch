@@ -1,10 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Optional user-supplied mascot at ~/.cachewatch/icon.png. Licensed art stays
-/// local — the repo ships only the drawn Starburst fallback. The loader keys out
-/// the background color sampled at the top-left corner, so flat-background
-/// sprites (pixel art sheets) drop in without editing.
+/// Uses the native app's bundled icon, with ~/.cachewatch/icon.png retained as
+/// the override for bare SwiftPM builds. Flat backgrounds are keyed out so the
+/// pixel mascot sits directly in the menu bar and notification banner.
 @MainActor
 enum MascotIcon {
     static let image: NSImage? = load()
@@ -20,6 +19,11 @@ enum MascotIcon {
     }
 
     private static func load() -> NSImage? {
+        if Bundle.main.bundleIdentifier != nil,
+           let bundled = NSImage(named: "MenuBarMascot")
+                ?? NSApplication.shared.applicationIconImage {
+            return chromaKeyed(bundled) ?? bundled
+        }
         let path = (NSHomeDirectory() as NSString).appendingPathComponent(".cachewatch/icon.png")
         guard let source = NSImage(contentsOfFile: path) else { return nil }
         return chromaKeyed(source) ?? source
@@ -49,7 +53,7 @@ enum MascotIcon {
     }
 }
 
-/// Banner mascot: the user's icon when present, the drawn starburst otherwise.
+/// Banner mascot: the bundled/override icon when present, starburst otherwise.
 /// Same entrance and idle motion either way.
 struct BannerMascot: View {
     @State private var landed = false

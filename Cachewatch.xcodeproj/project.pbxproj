@@ -1,0 +1,287 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B10000000000000000000001 /* AlertCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* AlertCenter.swift */; };
+		B10000000000000000000002 /* CachewatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* CachewatchApp.swift */; };
+		B10000000000000000000003 /* FleetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* FleetView.swift */; };
+		B10000000000000000000004 /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* Formatting.swift */; };
+		B10000000000000000000005 /* MascotIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* MascotIcon.swift */; };
+		B10000000000000000000006 /* NotchSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* NotchSurface.swift */; };
+		B10000000000000000000007 /* Setup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* Setup.swift */; };
+		B10000000000000000000008 /* Starburst.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* Starburst.swift */; };
+		B10000000000000000000009 /* SystemMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* SystemMemory.swift */; };
+		B1000000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* Assets.xcassets */; };
+		B1000000000000000000000B /* CollectorEngine in Frameworks */ = {isa = PBXBuildFile; productRef = E10000000000000000000002 /* CollectorEngine */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000001 /* AlertCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertCenter.swift; sourceTree = "<group>"; };
+		A10000000000000000000002 /* CachewatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachewatchApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000003 /* FleetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FleetView.swift; sourceTree = "<group>"; };
+		A10000000000000000000004 /* Formatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatting.swift; sourceTree = "<group>"; };
+		A10000000000000000000005 /* MascotIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotIcon.swift; sourceTree = "<group>"; };
+		A10000000000000000000006 /* NotchSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchSurface.swift; sourceTree = "<group>"; };
+		A10000000000000000000007 /* Setup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Setup.swift; sourceTree = "<group>"; };
+		A10000000000000000000008 /* Starburst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Starburst.swift; sourceTree = "<group>"; };
+		A10000000000000000000009 /* SystemMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemMemory.swift; sourceTree = "<group>"; };
+		A1000000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Cachewatch/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		A1000000000000000000000B /* Cachewatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cachewatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C10000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000000000000000000000B /* CollectorEngine in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D10000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				D10000000000000000000002 /* Cachewatch Sources */,
+				A1000000000000000000000A /* Assets.xcassets */,
+				D10000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D10000000000000000000002 /* Cachewatch Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000001 /* AlertCenter.swift */,
+				A10000000000000000000002 /* CachewatchApp.swift */,
+				A10000000000000000000003 /* FleetView.swift */,
+				A10000000000000000000004 /* Formatting.swift */,
+				A10000000000000000000005 /* MascotIcon.swift */,
+				A10000000000000000000006 /* NotchSurface.swift */,
+				A10000000000000000000007 /* Setup.swift */,
+				A10000000000000000000008 /* Starburst.swift */,
+				A10000000000000000000009 /* SystemMemory.swift */,
+			);
+			name = "Cachewatch Sources";
+			path = Sources/Cachewatch;
+			sourceTree = SOURCE_ROOT;
+		};
+		D10000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000000B /* Cachewatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E10000000000000000000001 /* Cachewatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F10000000000000000000002 /* Build configuration list for PBXNativeTarget "Cachewatch" */;
+			buildPhases = (
+				C10000000000000000000003 /* Sources */,
+				C10000000000000000000001 /* Frameworks */,
+				C10000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Cachewatch;
+			packageProductDependencies = (
+				E10000000000000000000002 /* CollectorEngine */,
+			);
+			productName = Cachewatch;
+			productReference = A1000000000000000000000B /* Cachewatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E10000000000000000000003 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					E10000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = F10000000000000000000001 /* Build configuration list for PBXProject "Cachewatch" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D10000000000000000000001;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E10000000000000000000004 /* XCLocalSwiftPackageReference "." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D10000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E10000000000000000000001 /* Cachewatch */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C10000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000000000000000000000A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C10000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* AlertCenter.swift in Sources */,
+				B10000000000000000000002 /* CachewatchApp.swift in Sources */,
+				B10000000000000000000003 /* FleetView.swift in Sources */,
+				B10000000000000000000004 /* Formatting.swift in Sources */,
+				B10000000000000000000005 /* MascotIcon.swift in Sources */,
+				B10000000000000000000006 /* NotchSurface.swift in Sources */,
+				B10000000000000000000007 /* Setup.swift in Sources */,
+				B10000000000000000000008 /* Starburst.swift in Sources */,
+				B10000000000000000000009 /* SystemMemory.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		F10000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+		};
+			name = Debug;
+		};
+		F10000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+		};
+			name = Release;
+		};
+		F10000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cachewatch;
+				INFOPLIST_KEY_LSUIElement = YES;
+				MARKETING_VERSION = 0.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fyzanshaik.cachewatch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		F10000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cachewatch;
+				INFOPLIST_KEY_LSUIElement = YES;
+				MARKETING_VERSION = 0.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fyzanshaik.cachewatch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F10000000000000000000001 /* Build configuration list for PBXProject "Cachewatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F10000000000000000000003 /* Debug */,
+				F10000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F10000000000000000000002 /* Build configuration list for PBXNativeTarget "Cachewatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F10000000000000000000005 /* Debug */,
+				F10000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E10000000000000000000004 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E10000000000000000000002 /* CollectorEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E10000000000000000000004 /* XCLocalSwiftPackageReference "." */;
+			productName = CollectorEngine;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E10000000000000000000003 /* Project object */;
+}

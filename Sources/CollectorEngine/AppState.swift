@@ -11,6 +11,7 @@ public struct AppState: Sendable, Equatable, Codable {
     public var lastRateLimitsAsOf: Date?
     public var calibration: QuotaCalibrator?
     public var notchHUDEnabled = false
+    public var launchAtLogin = false
 
     public init() {}
 
@@ -23,6 +24,7 @@ public struct AppState: Sendable, Equatable, Codable {
         lastRateLimitsAsOf = try c.decodeIfPresent(Date.self, forKey: .lastRateLimitsAsOf)
         calibration = try c.decodeIfPresent(QuotaCalibrator.self, forKey: .calibration)
         notchHUDEnabled = try c.decodeIfPresent(Bool.self, forKey: .notchHUDEnabled) ?? false
+        launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
     }
 
     public func encoded() throws -> Data {

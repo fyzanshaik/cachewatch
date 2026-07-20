@@ -117,4 +117,24 @@ func runAlertTests(_ t: TestKit) {
         let minimal = try AppState.decode(from: Data(#"{"schemaVersion":1}"#.utf8))
         t.expectEqual(minimal.alerts.quota.thresholdPercentage, 80, "defaults applied")
     }
+
+    t.run("launchAtLoginPersistsAndDefaultsOff") { t in
+        var state = AppState()
+        t.expectEqual(state.launchAtLogin, false, "default")
+
+        state.launchAtLogin = true
+        let decoded = try AppState.decode(from: state.encoded())
+        t.expectEqual(decoded.launchAtLogin, true, "round trip")
+
+        let legacy = try AppState.decode(from: Data(#"{"schemaVersion":1}"#.utf8))
+        t.expectEqual(legacy.launchAtLogin, false, "missing legacy field")
+    }
+
+    t.run("launchAtLoginStatusHasConsistentCapabilities") { t in
+        t.expectEqual(LaunchAtLoginStatus.unavailable.canManage, false, "unavailable is disabled")
+        t.expectEqual(LaunchAtLoginStatus.disabled.isRegistered, false, "disabled is not registered")
+        t.expectEqual(LaunchAtLoginStatus.disabled.canManage, true, "bundled disabled state is manageable")
+        t.expectEqual(LaunchAtLoginStatus.enabled.isRegistered, true, "enabled is registered")
+        t.expectEqual(LaunchAtLoginStatus.pendingApproval.isRegistered, true, "pending remains registered")
+    }
 }

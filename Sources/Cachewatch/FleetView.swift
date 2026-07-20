@@ -39,6 +39,14 @@ struct FleetView: View {
                     .foregroundStyle(.tertiary)
                     .font(.caption)
                     .help("Hover the notch to open this panel there; alerts appear at the notch either way")
+                    Button(model.alertCenter.launchAtLoginLabel) {
+                        model.alertCenter.toggleLaunchAtLogin()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                    .font(.caption)
+                    .disabled(!model.alertCenter.canManageLaunchAtLogin)
+                    .help(model.alertCenter.launchAtLoginHelp)
                     Button("Test alert") { model.alertCenter.deliverTest() }
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
