@@ -14,6 +14,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Determine release signing mode
+        env:
+          DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          configured=0
+          missing=0
+          for variable_name in \
+            DEVELOPER_ID_APPLICATION_P12_BASE64 \
+            DEVELOPER_ID_APPLICATION_P12_PASSWORD \
+            APPLE_ID \
+            APPLE_TEAM_ID \
+            APPLE_APP_SPECIFIC_PASSWORD
+          do
+            if [[ -z "${!variable_name:-}" ]]; then
+              missing=$((missing + 1))
+            else
+              configured=$((configured + 1))
+            fi
+          done
+
+          if [[ "$configured" -eq 0 ]]; then
+            echo "Publishing an ad-hoc signed release; Gatekeeper approval will be required."
+            echo "CACHEWATCH_NOTARIZE_RELEASE=false" >> "$GITHUB_ENV"
+          elif [[ "$missing" -ne 0 ]]; then
+            echo "Apple release secrets are partially configured; set all five or remove all five." >&2
+            exit 1
+          else
+            echo "Publishing a Developer ID signed and notarized release."
+            echo "CACHEWATCH_NOTARIZE_RELEASE=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Validate tap credentials
         env:
           GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
@@ -30,11 +65,65 @@ jobs:
       - name: Verify
         run: swift test
 
+      - name: Import Developer ID certificate
+        if: env.CACHEWATCH_NOTARIZE_RELEASE == 'true'
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+        run: |
+          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
+          keychain_path="$RUNNER_TEMP/cachewatch-signing.keychain-db"
+          keychain_password="$(uuidgen)"
+
+          printf '%s' "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+          security default-keychain -d user -s "$keychain_path"
+
+          identity="$(security find-identity -v -p codesigning "$keychain_path" | awk -F\" '/Developer ID Application/ { print $2; exit }')"
+          if [[ -z "$identity" ]]; then
+            echo "The imported archive has no valid Developer ID Application identity" >&2
+            exit 1
+          fi
+          echo "CACHEWATCH_CODE_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
       - name: Build release packages
+        env:
+          CACHEWATCH_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
         run: scripts/package-release.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/dist"
 
-      - name: Test native app archive
-        run: scripts/test-release-package.sh "$RUNNER_TEMP/dist/Cachewatch-${GITHUB_REF_NAME#v}-macos-arm64.zip" "$GITHUB_REF_NAME"
+      - name: Notarize and staple release packages
+        if: env.CACHEWATCH_NOTARIZE_RELEASE == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          scripts/notarize-release.sh \
+            "$RUNNER_TEMP/dist/Cachewatch-${version}-macos-arm64.zip"
+
+      - name: Test release packages
+        run: |
+          verification_args=(
+            "$RUNNER_TEMP/dist/Cachewatch-${GITHUB_REF_NAME#v}-macos-arm64.zip"
+            "$GITHUB_REF_NAME"
+          )
+          if [[ "$CACHEWATCH_NOTARIZE_RELEASE" == "true" ]]; then
+            verification_args+=(--require-notarization)
+          fi
+          scripts/test-release-package.sh "${verification_args[@]}"
 
       - name: Publish GitHub release
         env:

@@ -19,10 +19,19 @@ cask "cachewatch" do
   ]
 
   caveats <<~EOS
-    Launch Cachewatch once and approve it if Gatekeeper asks:
+    Cachewatch releases may be distributed without Apple notarization. If
+    Gatekeeper blocks this release and you trust the app, use:
+      System Settings > Privacy & Security > Open Anyway
+
+    Do not clear quarantine attributes or disable Gatekeeper.
+
+    Launch Cachewatch before running setup:
       open -a Cachewatch
 
     Then connect it to Claude Code's statusline (idempotent and backed up):
       cachewatch setup
+
+    Cachewatch is menu-bar-only; it has no Dock icon or normal app window.
+    Full guide: https://github.com/fyzanshaik/cachewatch/blob/main/INSTALL.md
   EOS
 end

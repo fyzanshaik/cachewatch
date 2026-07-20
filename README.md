@@ -49,15 +49,40 @@ One reducer turns all of it into an immutable fleet snapshot; the UI just render
 
 Needs macOS 15+ on Apple silicon. No compiler or Xcode is required.
 
+> [!IMPORTANT]
+> Current public releases are ad-hoc signed and are not notarized by Apple. The
+> maintainer does not currently pay for an Apple Developer Program membership,
+> so macOS may require one-time approval through **System Settings > Privacy &
+> Security > Open Anyway**. Do not remove quarantine attributes or disable
+> Gatekeeper. See the complete [installation guide](INSTALL.md).
+
+### Install with your coding agent
+
+Copy this prompt into Codex, Claude Code, or another local agent:
+
+```text
+Install Cachewatch, a macOS menu bar app that monitors local Claude Code
+sessions, prompt-cache TTL, quota, memory, and alerts. First fetch and read:
+https://raw.githubusercontent.com/fyzanshaik/cachewatch/main/INSTALL.md
+
+Explain what the app does, its requirements, the current Apple notarization
+disclaimer, and every file or setting that installation changes. Then follow
+that guide exactly to install, launch, connect, and verify it. Do not remove
+quarantine attributes, disable Gatekeeper, or bypass macOS security controls.
+If Gatekeeper blocks it, pause and guide me through Apple's Open Anyway flow.
+```
+
+### Install manually
+
 ```sh
 brew install --cask fyzanshaik/tap/cachewatch
-open -a Cachewatch  # first launch; approve it if Gatekeeper asks
+open -a Cachewatch  # approve through Privacy & Security if Gatekeeper blocks it
 cachewatch setup    # wires the statusline forwarder, backs up settings first
 ```
 
 The cask installs the native app in `/Applications` and exposes its command-line
-entry point as `cachewatch`. Until the release is Developer ID notarized,
-right-click Cachewatch and choose Open on the first launch if Gatekeeper blocks it.
+entry point as `cachewatch`. Cachewatch has no normal window or Dock icon; after
+launch it appears on the right side of the macOS menu bar.
 
 Or from source:
 
@@ -75,7 +100,9 @@ notifications and expose a launch-at-login toggle; bare `swift run` builds keep
 the `osascript` notification fallback.
 
 The native app archive and a standalone arm64 command-line binary are attached
-to each [release](https://github.com/fyzanshaik/cachewatch/releases).
+to each [release](https://github.com/fyzanshaik/cachewatch/releases). Maintainer
+instructions for Developer ID signing and notarization are in
+[docs/releasing.md](docs/releasing.md).
 
 ### Statusline hookup
 
