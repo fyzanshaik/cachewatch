@@ -51,8 +51,8 @@ Needs macOS 15+ on Apple silicon. No compiler or Xcode is required.
 
 ```sh
 brew install --cask fyzanshaik/tap/cachewatch
+open -a Cachewatch  # first launch; approve it if Gatekeeper asks
 cachewatch setup    # wires the statusline forwarder, backs up settings first
-open -a Cachewatch  # launches the menu bar app
 ```
 
 The cask installs the native app in `/Applications` and exposes its command-line

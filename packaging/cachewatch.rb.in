@@ -19,10 +19,10 @@ cask "cachewatch" do
   ]
 
   caveats <<~EOS
-    Connect Cachewatch to Claude Code's statusline (idempotent and backed up):
-      cachewatch setup
-
-    Then launch Cachewatch from Applications or run:
+    Launch Cachewatch once and approve it if Gatekeeper asks:
       open -a Cachewatch
+
+    Then connect it to Claude Code's statusline (idempotent and backed up):
+      cachewatch setup
   EOS
 end
