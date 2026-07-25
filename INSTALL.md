@@ -1,18 +1,19 @@
 # Install Cachewatch
 
-Cachewatch is a macOS menu bar app that monitors all local Claude Code sessions:
-live state, prompt-cache TTL, quota, memory, and actionable alerts. It reads
-Claude Code's existing local files and statusline data. It does not call an AI
-API or spend tokens.
+Cachewatch monitors all local Claude Code sessions: live state, prompt-cache
+TTL, quota, and memory. The macOS app also provides actionable alerts. It runs
+as a macOS menu bar app or a Linux terminal frontend. It reads Claude Code's
+existing local files and statusline data. It does not call an AI API or spend
+tokens.
 
 ## Before installing
 
-Cachewatch currently requires:
+Cachewatch requires Claude Code plus one of these platforms:
 
-- Apple silicon (`arm64`)
-- macOS 15 or newer
-- Homebrew
-- Claude Code
+- Apple silicon (`arm64`), macOS 15 or newer, and Homebrew for the native app;
+  or
+- 64-bit Linux, Swift 6 or newer, procps, and an OpenBSD-compatible `nc` for
+  the terminal frontend.
 
 > [!IMPORTANT]
 > Current public releases are ad-hoc signed and are not notarized by Apple. The
@@ -20,8 +21,35 @@ Cachewatch currently requires:
 > macOS Gatekeeper may therefore block the first launch. Review the source and
 > release provenance before installing, and use Apple's **Open Anyway** flow if
 > you trust the app. Do not remove quarantine attributes or disable Gatekeeper.
+> This warning applies to the macOS release.
 
-## Install with Homebrew
+## Install on Linux
+
+Install runtime dependencies and build from source. Install Swift 6 or newer
+using the package provided for your distribution first.
+
+```sh
+sudo apt-get install netcat-openbsd procps
+git clone https://github.com/fyzanshaik/cachewatch
+cd cachewatch
+swift build -c release
+mkdir -p ~/.local/bin
+install -m 755 .build/release/Cachewatch ~/.local/bin/cachewatch
+```
+
+Ensure `~/.local/bin` is on `PATH`, then configure and start Cachewatch:
+
+```sh
+cachewatch setup
+cachewatch
+```
+
+With no command, the Linux executable renders a live fleet table until Ctrl-C.
+Use `cachewatch dump` for a one-shot table. The Linux frontend does not
+currently send desktop notifications or provide macOS-only focus, close, and
+notch controls.
+
+## Install on macOS with Homebrew
 
 Install the native app and its `cachewatch` command:
 
@@ -47,7 +75,8 @@ launches, look for its icon on the right side of the macOS menu bar.
 
 ## Connect Claude Code
 
-After Cachewatch has launched successfully, run:
+On macOS, launch Cachewatch successfully before setup. On Linux, start the live
+terminal view after setup. Configure either platform with:
 
 ```sh
 cachewatch setup
@@ -63,40 +92,42 @@ This command:
 - is safe to run again.
 
 Restart existing Claude Code sessions so they load the updated statusline
-configuration.
+configuration. On Linux, keep `cachewatch` running when you want live
+statusline quota updates.
 
 ## Verify
 
 ```sh
-pgrep -fl Cachewatch
 cachewatch dump
 ```
 
-The first command should show the running app. The second should print the
-locally discovered Claude Code session fleet. An empty fleet is normal when no
-Claude Code sessions are running.
+The command should print the locally discovered Claude Code session fleet. An
+empty fleet is normal when no Claude Code sessions are running. On macOS,
+`pgrep -fl Cachewatch` also verifies that the menu bar app is running.
 
 ## Install with a coding agent
 
 Copy the prompt below into Codex, Claude Code, or another local coding agent:
 
 ```text
-Install Cachewatch, a macOS menu bar app that monitors local Claude Code
-sessions, prompt-cache TTL, quota, memory, and alerts.
+Install Cachewatch, a macOS menu bar app or Linux terminal frontend that
+monitors local Claude Code sessions, prompt-cache TTL, quota, memory, and
+alerts.
 
 First fetch and read the canonical installation guide:
 https://raw.githubusercontent.com/fyzanshaik/cachewatch/main/INSTALL.md
 
 Before changing anything, explain to me:
 1. what Cachewatch does and what local data it reads;
-2. the macOS, architecture, Homebrew, and Claude Code requirements;
+2. the requirements for my operating system and Claude Code;
 3. the current ad-hoc-signing and Apple notarization disclaimer; and
 4. every file or setting the installation and `cachewatch setup` will change.
 
-Then install it by following that guide exactly. Do not remove quarantine
-attributes, disable Gatekeeper, or bypass macOS security controls. If Gatekeeper
-blocks the app, pause and guide me through System Settings > Privacy & Security
-> Open Anyway. Launch the app before running `cachewatch setup`, restart any
-existing Claude Code sessions, and verify both the Cachewatch process and
-`cachewatch dump`. Report what succeeded and anything that still needs me.
+Then install it by following that guide exactly. On macOS, do not remove
+quarantine attributes, disable Gatekeeper, or bypass security controls. If
+Gatekeeper blocks the app, pause and guide me through System Settings > Privacy
+& Security > Open Anyway. Launch the macOS app before setup. On Linux, build
+the terminal frontend from source and start its live view after setup. Restart
+any existing Claude Code sessions, run `cachewatch dump`, and report what
+succeeded and anything that still needs me.
 ```

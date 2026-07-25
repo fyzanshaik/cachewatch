@@ -1,6 +1,20 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+#if os(Linux)
+let cachewatchExecutable = Target.executableTarget(
+    name: "Cachewatch",
+    dependencies: ["CollectorEngine", "CachewatchTerminal"],
+    path: "Sources/CachewatchCLI"
+)
+#else
+let cachewatchExecutable = Target.executableTarget(
+    name: "Cachewatch",
+    dependencies: ["CollectorEngine"],
+    path: "Sources/Cachewatch"
+)
+#endif
+
 let package = Package(
     name: "Cachewatch",
     platforms: [.macOS(.v15)],
@@ -9,13 +23,14 @@ let package = Package(
     ],
     targets: [
         .target(name: "CollectorEngine"),
-        .executableTarget(
-            name: "Cachewatch",
+        .target(
+            name: "CachewatchTerminal",
             dependencies: ["CollectorEngine"]
         ),
+        cachewatchExecutable,
         .testTarget(
             name: "CollectorEngineTests",
-            dependencies: ["CollectorEngine"],
+            dependencies: ["CollectorEngine", "CachewatchTerminal"],
             resources: [.copy("Fixtures")]
         ),
     ]
