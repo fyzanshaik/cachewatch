@@ -1,7 +1,15 @@
 import Foundation
 
 public struct CollectorConfig: Sendable {
+    public static var defaultCodexDirectory: URL {
+        if let path = ProcessInfo.processInfo.environment["CODEX_HOME"], !path.isEmpty {
+            return URL(fileURLWithPath: path)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codex")
+    }
+
     public var claudeDir: URL
+    public var codexDir: URL
     public var socketPath: String
     public var registryInterval: Duration = .seconds(2)
     public var transcriptInterval: Duration = .seconds(2)
@@ -9,14 +17,17 @@ public struct CollectorConfig: Sendable {
 
     public init(
         claudeDir: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude"),
+        codexDir: URL = CollectorConfig.defaultCodexDirectory,
         socketPath: String = (NSHomeDirectory() as NSString).appendingPathComponent(".cachewatch/statusline.sock")
     ) {
         self.claudeDir = claudeDir
+        self.codexDir = codexDir
         self.socketPath = socketPath
     }
 
     var sessionsDir: URL { claudeDir.appending(path: "sessions") }
     var projectsDir: URL { claudeDir.appending(path: "projects") }
+    var codexSessionsDir: URL { codexDir.appending(path: "sessions") }
 }
 
 /// Owns the reducer and all sources; publishes a FleetSnapshot stream for any UI to render.
@@ -60,8 +71,15 @@ public actor Collector {
         let config = config
 
         Task {
+            var codexSource = CodexSessionSource(directory: config.codexSessionsDir)
             while !Task.isCancelled {
-                self.apply(.registrySnapshot(RegistryScanner.scan(directory: config.sessionsDir)))
+                let codexSessions = codexSource.poll()
+                let registry = RegistryScanner.scan(directory: config.sessionsDir)
+                    + codexSessions.map { pid, snapshot in snapshot.registryEntry(pid: pid) }
+                self.apply(.registrySnapshot(registry))
+                for (_, snapshot) in codexSessions {
+                    self.apply(.codexSession(snapshot))
+                }
                 try? await Task.sleep(for: config.registryInterval)
             }
         }
@@ -112,7 +130,14 @@ public actor Collector {
     /// One-shot snapshot from a single pass over all file-based sources (no socket data).
     public static func dump(config: CollectorConfig = CollectorConfig()) -> FleetSnapshot {
         var reducer = FleetReducer()
-        reducer.apply(.registrySnapshot(RegistryScanner.scan(directory: config.sessionsDir)))
+        var codexSource = CodexSessionSource(directory: config.codexSessionsDir)
+        let codexSessions = codexSource.poll()
+        let registry = RegistryScanner.scan(directory: config.sessionsDir)
+            + codexSessions.map { pid, snapshot in snapshot.registryEntry(pid: pid) }
+        reducer.apply(.registrySnapshot(registry))
+        for (_, snapshot) in codexSessions {
+            reducer.apply(.codexSession(snapshot))
+        }
         var tailer = TranscriptTailer(directory: config.projectsDir)
         for turn in tailer.poll() {
             reducer.apply(.assistantTurn(turn))

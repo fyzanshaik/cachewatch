@@ -1,9 +1,9 @@
 # Install Cachewatch
 
-Cachewatch is a macOS menu bar app that monitors all local Claude Code sessions:
-live state, prompt-cache TTL, quota, memory, and actionable alerts. It reads
-Claude Code's existing local files and statusline data. It does not call an AI
-API or spend tokens.
+Cachewatch is a macOS menu bar app that monitors local Claude Code and Codex
+sessions: live state, context, quota, memory, actionable alerts, and Claude
+prompt-cache TTL. It reads the agents' existing local files and status data. It
+does not call an AI API or spend tokens.
 
 ## Before installing
 
@@ -12,7 +12,7 @@ Cachewatch currently requires:
 - Apple silicon (`arm64`)
 - macOS 15 or newer
 - Homebrew
-- Claude Code
+- Claude Code and/or Codex
 
 > [!IMPORTANT]
 > Current public releases are ad-hoc signed and are not notarized by Apple. The
@@ -65,6 +65,9 @@ This command:
 Restart existing Claude Code sessions so they load the updated statusline
 configuration.
 
+Codex needs no setup. Cachewatch discovers rollout files held open by live
+Codex processes and never modifies `~/.codex/config.toml`.
+
 ## Verify
 
 ```sh
@@ -73,23 +76,23 @@ cachewatch dump
 ```
 
 The first command should show the running app. The second should print the
-locally discovered Claude Code session fleet. An empty fleet is normal when no
-Claude Code sessions are running.
+locally discovered Claude Code and Codex fleet. An empty fleet is normal when
+neither agent has a live session.
 
 ## Install with a coding agent
 
 Copy the prompt below into Codex, Claude Code, or another local coding agent:
 
 ```text
-Install Cachewatch, a macOS menu bar app that monitors local Claude Code
-sessions, prompt-cache TTL, quota, memory, and alerts.
+Install Cachewatch, a macOS menu bar app that monitors local Claude Code and
+Codex sessions, context, quota, memory, alerts, and Claude prompt-cache TTL.
 
 First fetch and read the canonical installation guide:
 https://raw.githubusercontent.com/fyzanshaik/cachewatch/main/INSTALL.md
 
 Before changing anything, explain to me:
 1. what Cachewatch does and what local data it reads;
-2. the macOS, architecture, Homebrew, and Claude Code requirements;
+2. the macOS, architecture, Homebrew, and supported-agent requirements;
 3. the current ad-hoc-signing and Apple notarization disclaimer; and
 4. every file or setting the installation and `cachewatch setup` will change.
 

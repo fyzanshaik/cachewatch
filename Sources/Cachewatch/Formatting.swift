@@ -42,13 +42,14 @@ enum Format {
 func printDump() {
     let fleet = Collector.dump()
     if fleet.sessions.isEmpty {
-        print("No live Claude Code sessions.")
+        print("No live Claude Code or Codex sessions.")
         return
     }
-    let header = ["SESSION", "STATUS", "MODEL", "CONTEXT", "CACHE", "MEMORY", "LAST TURN"]
+    let header = ["AGENT", "SESSION", "STATUS", "MODEL", "CONTEXT", "CACHE", "MEMORY", "LAST TURN"]
     var rows = [header]
     for s in fleet.sessions {
         rows.append([
+            s.provider == .codex ? "codex" : "claude",
             s.name ?? String(s.sessionId.prefix(8)),
             s.status.rawValue,
             Format.model(s.model),
