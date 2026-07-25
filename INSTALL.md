@@ -1,19 +1,19 @@
 # Install Cachewatch
 
-Cachewatch monitors all local Claude Code sessions: live state, prompt-cache
-TTL, quota, and memory. The macOS app also provides actionable alerts. It runs
-as a macOS menu bar app or a Linux terminal frontend. It reads Claude Code's
-existing local files and statusline data. It does not call an AI API or spend
-tokens.
+Cachewatch monitors local Claude Code and Codex sessions: live state, context,
+quota, memory, and Claude prompt-cache TTL. The macOS app also provides
+actionable alerts. It runs as a macOS menu bar app or a Linux terminal
+frontend. It reads the agents' existing local files and status data. It does
+not call an AI API or spend tokens.
 
 ## Before installing
 
-Cachewatch requires Claude Code plus one of these platforms:
+Cachewatch requires Claude Code and/or Codex plus one of these platforms:
 
 - Apple silicon (`arm64`), macOS 15 or newer, and Homebrew for the native app;
   or
-- 64-bit Linux, Swift 6 or newer, procps, and an OpenBSD-compatible `nc` for
-  the terminal frontend.
+- 64-bit Linux, Swift 6 or newer, `lsof`, `ps`, and an `nc` implementation with
+  Unix socket support for the terminal frontend.
 
 > [!IMPORTANT]
 > Current public releases are ad-hoc signed and are not notarized by Apple. The
@@ -29,7 +29,12 @@ Install runtime dependencies and build from source. Install Swift 6 or newer
 using the package provided for your distribution first.
 
 ```sh
-sudo apt-get install netcat-openbsd procps
+# Ubuntu or Debian
+sudo apt-get install lsof netcat-openbsd procps
+
+# Fedora
+sudo dnf install lsof nmap-ncat procps-ng swift-lang
+
 git clone https://github.com/fyzanshaik/cachewatch
 cd cachewatch
 swift build -c release
@@ -95,14 +100,17 @@ Restart existing Claude Code sessions so they load the updated statusline
 configuration. On Linux, keep `cachewatch` running when you want live
 statusline quota updates.
 
+Codex needs no setup. Cachewatch discovers rollout files held open by live
+Codex processes and never modifies `~/.codex/config.toml`.
+
 ## Verify
 
 ```sh
 cachewatch dump
 ```
 
-The command should print the locally discovered Claude Code session fleet. An
-empty fleet is normal when no Claude Code sessions are running. On macOS,
+The command should print the locally discovered Claude Code and Codex fleet.
+An empty fleet is normal when neither agent has a live session. On macOS,
 `pgrep -fl Cachewatch` also verifies that the menu bar app is running.
 
 ## Install with a coding agent
@@ -111,15 +119,15 @@ Copy the prompt below into Codex, Claude Code, or another local coding agent:
 
 ```text
 Install Cachewatch, a macOS menu bar app or Linux terminal frontend that
-monitors local Claude Code sessions, prompt-cache TTL, quota, memory, and
-alerts.
+monitors local Claude Code and Codex sessions, context, quota, memory, alerts,
+and Claude prompt-cache TTL.
 
 First fetch and read the canonical installation guide:
 https://raw.githubusercontent.com/fyzanshaik/cachewatch/main/INSTALL.md
 
 Before changing anything, explain to me:
 1. what Cachewatch does and what local data it reads;
-2. the requirements for my operating system and Claude Code;
+2. the requirements for my operating system and supported agents;
 3. the current ad-hoc-signing and Apple notarization disclaimer; and
 4. every file or setting the installation and `cachewatch setup` will change.
 

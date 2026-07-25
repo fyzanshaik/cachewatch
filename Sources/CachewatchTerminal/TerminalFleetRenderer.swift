@@ -4,19 +4,25 @@ import CollectorEngine
 public enum TerminalFleetRenderer {
     public static func render(_ fleet: FleetSnapshot, now: Date = Date()) -> String {
         guard !fleet.sessions.isEmpty else {
-            return "No live Claude Code sessions."
+            return "No live Claude Code or Codex sessions."
         }
 
         var lines: [String] = []
         if let quota = quotaSummary(fleet.rateLimits, now: now) {
-            lines.append("Quota: \(quota)")
+            lines.append("Claude quota: \(quota)")
+        }
+        if let quota = quotaSummary(fleet.codexRateLimits, now: now) {
+            lines.append("Codex quota: \(quota)")
+        }
+        if !lines.isEmpty {
             lines.append("")
         }
 
-        let header = ["SESSION", "STATUS", "MODEL", "CONTEXT", "CACHE", "MEMORY", "LAST TURN"]
+        let header = ["AGENT", "SESSION", "STATUS", "MODEL", "CONTEXT", "CACHE", "MEMORY", "LAST TURN"]
         var rows = [header]
         for session in fleet.sessions {
             rows.append([
+                session.provider.rawValue,
                 session.name ?? String(session.sessionId.prefix(8)),
                 session.status.rawValue,
                 model(session.model),

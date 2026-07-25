@@ -9,7 +9,10 @@ struct TerminalTests {
 
     @Test
     func rendersEmptyFleet() {
-        #expect(TerminalFleetRenderer.render(FleetSnapshot(), now: now) == "No live Claude Code sessions.")
+        #expect(
+            TerminalFleetRenderer.render(FleetSnapshot(), now: now)
+                == "No live Claude Code or Codex sessions."
+        )
     }
 
     @Test
@@ -29,18 +32,43 @@ struct TerminalTests {
         session.cacheTTL = .fiveMinutes
         session.memoryBytes = 512_000_000
 
+        var codex = SessionSnapshot(
+            sessionId: "codex-1234",
+            pid: 43,
+            provider: .codex,
+            name: "codex-project",
+            cwd: "/tmp/codex-project",
+            status: .busy,
+            startedAt: now.addingTimeInterval(-600),
+            updatedAt: now
+        )
+        codex.model = "gpt-5.6-sol"
+        codex.contextTokens = 80_000
+
         var fleet = FleetSnapshot()
-        fleet.sessions = [session]
+        fleet.sessions = [session, codex]
         let limits = try JSONDecoder.statusline.decode(
             StatuslinePayload.RateLimits.self,
             from: Data(#"{"five_hour":{"used_percentage":43,"resets_at":1784903600}}"#.utf8)
         )
         fleet.rateLimits = limits
+        fleet.codexRateLimits = StatuslinePayload.RateLimits(
+            fiveHour: nil,
+            sevenDay: StatuslinePayload.RateLimitWindow(
+                usedPercentage: 5,
+                resetsAt: now.addingTimeInterval(86_400)
+            )
+        )
 
         let output = TerminalFleetRenderer.render(fleet, now: now)
-        #expect(output.contains("Quota: 5h 43%"))
+        #expect(output.contains("Claude quota: 5h 43%"))
+        #expect(output.contains("Codex quota: 7d 5%"))
+        #expect(output.contains("AGENT"))
+        #expect(output.contains("claude"))
+        #expect(output.contains("codex"))
         #expect(output.contains("SESSION"))
         #expect(output.contains("cachewatch"))
+        #expect(output.contains("codex-project"))
         #expect(output.contains("waiting"))
         #expect(output.contains("opus-4-1"))
         #expect(output.contains("125k"))

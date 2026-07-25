@@ -13,13 +13,13 @@ struct FleetView: View {
                     HStack(spacing: 8) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Scanning Claude Code sessions…")
+                        Text("Scanning Claude Code and Codex sessions…")
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
                 } else if model.fleet.sessions.isEmpty {
-                    Text("No live Claude Code sessions")
+                    Text("No live Claude Code or Codex sessions")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 12)
@@ -96,15 +96,17 @@ struct FleetView: View {
                 Text("\(model.fleet.sessions.count) session\(model.fleet.sessions.count == 1 ? "" : "s")")
                     .font(.headline)
                 Spacer()
-                if model.fleet.rateLimits == nil {
-                    Text("quota: waiting for statusline data")
+                if model.fleet.rateLimits == nil && model.fleet.codexRateLimits == nil {
+                    Text("quota: waiting for agent data")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                } else if let asOf = model.fleet.rateLimitsAsOf, now.timeIntervalSince(asOf) > 120 {
+                } else if let asOf = newestQuotaTimestamp,
+                          now.timeIntervalSince(asOf) > 120 {
                     Text("quota as of \(Format.age(since: asOf, now: now)) ago")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                } else if model.fleet.calibration.dollarsPerPercent == nil {
+                } else if model.fleet.rateLimits != nil,
+                          model.fleet.calibration.dollarsPerPercent == nil {
                     Text("learning quota \(Int(model.fleet.calibration.progress * 100))%")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -113,12 +115,28 @@ struct FleetView: View {
             }
             if let limits = model.fleet.rateLimits {
                 HStack(spacing: 20) {
+                    Text("Claude").foregroundStyle(.secondary)
+                    QuotaBadge(label: "5h", window: limits.fiveHour, now: now)
+                    QuotaBadge(label: "7d", window: limits.sevenDay, now: now)
+                    Spacer()
+                }
+            }
+            if let limits = model.fleet.codexRateLimits {
+                HStack(spacing: 20) {
+                    Text("Codex").foregroundStyle(.secondary)
                     QuotaBadge(label: "5h", window: limits.fiveHour, now: now)
                     QuotaBadge(label: "7d", window: limits.sevenDay, now: now)
                     Spacer()
                 }
             }
         }
+        .font(.caption)
+    }
+
+    private var newestQuotaTimestamp: Date? {
+        [model.fleet.rateLimitsAsOf, model.fleet.codexRateLimitsAsOf]
+            .compactMap { $0 }
+            .max()
     }
 }
 
@@ -190,6 +208,12 @@ private struct SessionRow: View {
                     .lineLimit(1)
                     .layoutPriority(2)
                     .help(session.cwd)
+                Text(session.provider == .codex ? "Codex" : "Claude")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(.quinary))
                 if let host = session.hostAppName {
                     Button {
                         if let pid = session.hostAppPid {
@@ -253,7 +277,7 @@ private struct SessionRow: View {
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
                     .tint(.red)
-                    .help("Quits this Claude Code process (asks first)")
+                    .help("Quits this \(providerName) process (asks first)")
                     .opacity(hovering ? 1 : 0)
                     .allowsHitTesting(hovering)
                 }
@@ -279,8 +303,12 @@ private struct SessionRow: View {
                 kill(session.pid, SIGTERM)
             }
         } message: {
-            Text("Sends SIGTERM to the Claude Code process. Unsaved prompt drafts in that terminal are lost.")
+            Text("Sends SIGTERM to the \(providerName) process. Unsaved prompt drafts in that terminal are lost.")
         }
+    }
+
+    private var providerName: String {
+        session.provider == .codex ? "Codex" : "Claude Code"
     }
 
     /// Statusline-reported fill when available. Fallback infers the window class:

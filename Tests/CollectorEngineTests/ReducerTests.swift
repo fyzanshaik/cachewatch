@@ -53,6 +53,24 @@ struct ReducerTests {
     }
 
     @Test
+    func codexUpdateEnrichesCodexSessionWithoutInventingCacheTTL() throws {
+        let rollout = try #require(CodexRolloutParser.snapshot(from: Data(contentsOf: fixtureURL("codex-rollout.jsonl"))))
+        var reducer = FleetReducer()
+        reducer.apply(.registrySnapshot([rollout.registryEntry(pid: 4242)]))
+        reducer.apply(.codexSession(rollout))
+
+        let fleet = reducer.snapshot
+        let session = try #require(fleet.sessions.first)
+        #expect(session.provider == .codex)
+        #expect(session.model == "gpt-5.6-sol")
+        #expect(session.contextTokens == 138_575)
+        #expect(session.contextUsedPercentage.map { Int($0) } == 53)
+        #expect(session.cacheTTL == nil)
+        #expect(fleet.codexRateLimits?.sevenDay?.usedPercentage == 5)
+        #expect(fleet.codexRateLimitsAsOf == rollout.lastTurnAt)
+    }
+
+    @Test
     func sidechainTurnDoesNotOverwriteMainContext() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))

@@ -1,8 +1,8 @@
 import Foundation
 
-/// The app's single persisted file. Everything else is rebuilt from Claude Code's
-/// own files on launch. Missing fields decode to defaults, so schema additions
-/// never need migrations.
+/// The app's single persisted file. Everything else is rebuilt from agent-local
+/// files on launch. Missing fields decode to defaults, so schema additions never
+/// need migrations.
 public struct AppState: Sendable, Equatable, Codable {
     public var schemaVersion = 1
     public var alerts = AlertConfig.default
