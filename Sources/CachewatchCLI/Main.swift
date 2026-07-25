@@ -38,8 +38,11 @@ enum Main {
             if interactive {
                 output += "\u{001B}[2J\u{001B}[H"
             }
-            output += "Cachewatch live fleet. Press Ctrl-C to stop.\n\n"
-            output += TerminalFleetRenderer.render(fleet)
+            output += TerminalFleetRenderer.render(
+                fleet,
+                style: interactive ? .ansi : .plain,
+                live: true
+            )
             output += "\n"
             if !interactive {
                 output += "\n"
