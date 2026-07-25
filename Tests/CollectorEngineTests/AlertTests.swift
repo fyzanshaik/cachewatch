@@ -45,7 +45,7 @@ struct AlertTests {
         var fired: Set<String> = []
         let alerts = AlertEngine.evaluate(fleet: f, config: .default, now: now, alreadyFired: fired)
         #expect(alerts.count == 1, "one alert")
-        #expect(alerts[0].key.contains("quota-5h"), "quota key")
+        #expect(alerts[0].key.contains("quota-5h"), "legacy Claude quota key")
         fired.formUnion(alerts.map(\.key))
         #expect(AlertEngine.evaluate(fleet: f, config: .default, now: now, alreadyFired: fired).count == 0, "deduped")
     }
@@ -65,6 +65,23 @@ struct AlertTests {
     func quotaBelowThresholdIsQuiet() throws {
         let f = try fleet(fiveHourUsed: 79)
         #expect(AlertEngine.evaluate(fleet: f, config: .default, now: now, alreadyFired: []).count == 0, "quiet")
+    }
+
+    @Test
+    func codexQuotaUsesDistinctAlertIdentity() throws {
+        var f = try fleet(fiveHourUsed: 85, resetsAt: now.addingTimeInterval(3600))
+        f.codexRateLimits = StatuslinePayload.RateLimits(
+            fiveHour: StatuslinePayload.RateLimitWindow(
+                usedPercentage: 90,
+                resetsAt: now.addingTimeInterval(3600)
+            ),
+            sevenDay: nil
+        )
+        let alerts = AlertEngine.evaluate(fleet: f, config: .default, now: now, alreadyFired: [])
+        #expect(alerts.count == 2)
+        #expect(alerts.contains { $0.key.contains("quota-5h") && !$0.key.contains("codex") })
+        #expect(alerts.contains { $0.key.contains("quota-codex-5h") })
+        #expect(alerts.contains { $0.title.contains("Codex") })
     }
 
     @Test

@@ -1,0 +1,8 @@
+{
+  "uuid": "cachewatch@cneuralnetwork.github.com",
+  "name": "Cachewatch",
+  "description": "Monitor live Claude Code and Codex sessions from the GNOME top bar.",
+  "shell-version": ["45", "46", "47", "48"],
+  "url": "https://github.com/cneuralnetwork/cachewatch",
+  "version": 1
+}

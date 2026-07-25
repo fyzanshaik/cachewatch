@@ -27,6 +27,11 @@ public struct StatuslinePayload: Sendable, Decodable {
             case usedPercentage, resetsAt
         }
 
+        public init(usedPercentage: Double?, resetsAt: Date?) {
+            self.usedPercentage = usedPercentage
+            self.resetsAt = resetsAt
+        }
+
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             usedPercentage = try c.decodeIfPresent(Double.self, forKey: .usedPercentage)

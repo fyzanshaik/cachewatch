@@ -1,5 +1,10 @@
 import Foundation
 
+public enum SessionProvider: String, Sendable, Codable {
+    case claude
+    case codex
+}
+
 /// One file under `~/.claude/sessions/<pid>.json`, written by the Claude Code CLI.
 public struct SessionRegistryEntry: Sendable, Codable, Identifiable {
     public enum Status: String, Sendable, Codable {
@@ -14,6 +19,7 @@ public struct SessionRegistryEntry: Sendable, Codable, Identifiable {
 
     public let pid: Int32
     public let sessionId: String
+    public let provider: SessionProvider
     public let cwd: String
     public let name: String?
     public let version: String?
@@ -26,13 +32,14 @@ public struct SessionRegistryEntry: Sendable, Codable, Identifiable {
     public var id: String { sessionId }
 
     private enum CodingKeys: String, CodingKey {
-        case pid, sessionId, cwd, name, version, status, startedAt, updatedAt, statusUpdatedAt
+        case pid, sessionId, provider, cwd, name, version, status, startedAt, updatedAt, statusUpdatedAt
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         pid = try c.decode(Int32.self, forKey: .pid)
         sessionId = try c.decode(String.self, forKey: .sessionId)
+        provider = try c.decodeIfPresent(SessionProvider.self, forKey: .provider) ?? .claude
         cwd = try c.decode(String.self, forKey: .cwd)
         name = try c.decodeIfPresent(String.self, forKey: .name)
         version = try c.decodeIfPresent(String.self, forKey: .version)
@@ -41,6 +48,30 @@ public struct SessionRegistryEntry: Sendable, Codable, Identifiable {
         updatedAt = Date(timeIntervalSince1970: try c.decode(Double.self, forKey: .updatedAt) / 1000)
         let statusMs = try c.decodeIfPresent(Double.self, forKey: .statusUpdatedAt)
         statusUpdatedAt = statusMs.map { Date(timeIntervalSince1970: $0 / 1000) } ?? updatedAt
+    }
+
+    public init(
+        pid: Int32,
+        sessionId: String,
+        provider: SessionProvider,
+        cwd: String,
+        name: String?,
+        version: String?,
+        status: Status,
+        startedAt: Date,
+        updatedAt: Date,
+        statusUpdatedAt: Date
+    ) {
+        self.pid = pid
+        self.sessionId = sessionId
+        self.provider = provider
+        self.cwd = cwd
+        self.name = name
+        self.version = version
+        self.status = status
+        self.startedAt = startedAt
+        self.updatedAt = updatedAt
+        self.statusUpdatedAt = statusUpdatedAt
     }
 
     public static func decode(from data: Data) throws -> SessionRegistryEntry {

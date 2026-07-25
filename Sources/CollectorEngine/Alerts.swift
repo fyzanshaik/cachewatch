@@ -85,7 +85,20 @@ public enum AlertEngine {
         guard config.notificationsEnabled else { return [] }
         var alerts: [Alert] = []
         if config.quota.enabled {
-            alerts += quotaAlerts(fleet: fleet, config: config.quota, now: now)
+            alerts += quotaAlerts(
+                limits: fleet.rateLimits,
+                providerKey: nil,
+                providerName: "Claude",
+                config: config.quota,
+                now: now
+            )
+            alerts += quotaAlerts(
+                limits: fleet.codexRateLimits,
+                providerKey: "codex",
+                providerName: "Codex",
+                config: config.quota,
+                now: now
+            )
         }
         if config.cacheExpiry.enabled {
             alerts += cacheExpiryAlerts(fleet: fleet, config: config.cacheExpiry, now: now)
@@ -105,19 +118,26 @@ public enum AlertEngine {
         return alerts.filter { !alreadyFired.contains($0.key) }
     }
 
-    private static func quotaAlerts(fleet: FleetSnapshot, config: AlertConfig.Quota, now: Date) -> [Alert] {
+    private static func quotaAlerts(
+        limits: StatuslinePayload.RateLimits?,
+        providerKey: String?,
+        providerName: String,
+        config: AlertConfig.Quota,
+        now: Date
+    ) -> [Alert] {
         let windows: [(String, StatuslinePayload.RateLimitWindow?)] = [
-            ("5h", fleet.rateLimits?.fiveHour),
-            ("7d", fleet.rateLimits?.sevenDay),
+            ("5h", limits?.fiveHour),
+            ("7d", limits?.sevenDay),
         ]
         return windows.compactMap { label, window in
             guard let used = window?.usedPercentage, used >= config.thresholdPercentage,
                   window?.isExpired(at: now) != true
             else { return nil }
             let windowId = window?.resetsAt.map { String(Int($0.timeIntervalSince1970)) } ?? "unknown"
+            let keyPrefix = providerKey.map { "quota-\($0)" } ?? "quota"
             return Alert(
-                key: "quota-\(label)-\(windowId)",
-                title: "Claude \(label) quota at \(Int(used))%",
+                key: "\(keyPrefix)-\(label)-\(windowId)",
+                title: "\(providerName) \(label) quota at \(Int(used))%",
                 body: window?.resetsAt.map { "Resets \($0.formatted(date: .omitted, time: .shortened))." } ?? ""
             )
         }
@@ -188,7 +208,9 @@ public enum AlertEngine {
             return Alert(
                 key: "idle-\(session.sessionId)",
                 title: "\(session.name ?? session.sessionId) idle for \(Int(now.timeIntervalSince(idleSince) / 3600))h",
-                body: "Holding \(context / 1000)k tokens of context and \(memory / 1_000_000)MB of memory, cache cold. Consider closing it."
+                body: "Holding \(context / 1000)k tokens of context and \(memory / 1_000_000)MB of memory"
+                    + (session.provider == .claude ? ", cache cold" : "")
+                    + ". Consider closing it."
             )
         }
     }

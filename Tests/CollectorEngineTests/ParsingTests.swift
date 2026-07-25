@@ -17,6 +17,7 @@ struct ParsingTests {
         #expect(entry.sessionId == "df8a2ce7-cb1b-4efb-b525-c402a81af2dd", "sessionId")
         #expect(entry.cwd == "/Users/dev/workspace/atlan-clickhouse-app", "cwd")
         #expect(entry.name == "atlan-clickhouse-app-e8", "name")
+        #expect(entry.provider == .claude, "legacy entries default to Claude")
         #expect(entry.status == .idle, "status")
         #expect(entry.startedAt == Date(timeIntervalSince1970: 1_784_472_863.002), "startedAt")
         #expect(entry.updatedAt == Date(timeIntervalSince1970: 1_784_486_708.811), "updatedAt")
@@ -76,6 +77,50 @@ struct ParsingTests {
         let turns = TranscriptParser.assistantTurns(from: Data(line.utf8))
         #expect(turns.count == 1, "turn count")
         #expect(turns[0].usage?.cacheTTL == nil, "no ttl on read-only turn")
+    }
+
+    // MARK: - Codex rollout
+
+    @Test
+    func parsesCodexRolloutSnapshot() throws {
+        let snapshot = try #require(CodexRolloutParser.snapshot(from: fixture("codex-rollout.jsonl")))
+        #expect(snapshot.sessionId == "019f9858-1119-7220-9281-b9bbb2c8f130")
+        #expect(snapshot.cwd == "/home/dev/workspace/cachewatch")
+        #expect(snapshot.model == "gpt-5.6-sol")
+        #expect(snapshot.gitBranch == "main")
+        #expect(snapshot.status == .idle)
+        #expect(snapshot.contextTokens == 138_575)
+        #expect(snapshot.contextWindowSize == 258_400)
+        #expect(snapshot.contextUsedPercentage.map { Int($0) } == 53)
+        let lastTurn = try Date(
+            "2026-07-25T08:20:17.941Z",
+            strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        )
+        #expect(snapshot.lastTurnAt == lastTurn)
+        #expect(snapshot.rateLimits?.fiveHour == nil)
+        #expect(snapshot.rateLimits?.sevenDay?.usedPercentage == 5)
+        #expect(snapshot.rateLimits?.sevenDay?.resetsAt == Date(timeIntervalSince1970: 1_785_258_374))
+        #expect(snapshot.isUserFacing)
+    }
+
+    @Test
+    func codexRolloutToleratesUnknownLinesAndFiltersSubagents() throws {
+        let data = Data("""
+        {"timestamp":"2026-07-25T08:15:36Z","type":"future_event","payload":{"shape":"unknown"}}
+        {"timestamp":"2026-07-25T08:15:37Z","type":"session_meta","payload":{"id":"child","cwd":"/tmp/project","source":"cli","thread_source":{"subagent":{"agent_type":"explorer"}}}}
+        """.utf8)
+        let snapshot = try #require(CodexRolloutParser.snapshot(from: data))
+        #expect(snapshot.sessionId == "child")
+        #expect(!snapshot.isUserFacing)
+    }
+
+    @Test
+    func codexRolloutKeepsUnknownUserFacingThreadSource() throws {
+        let data = Data("""
+        {"timestamp":"2026-07-25T08:15:37Z","type":"session_meta","payload":{"id":"future","cwd":"/tmp/project","thread_source":"future_interactive_mode"}}
+        """.utf8)
+        let snapshot = try #require(CodexRolloutParser.snapshot(from: data))
+        #expect(snapshot.isUserFacing)
     }
 
     // MARK: - Statusline

@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Unix-domain-socket listener for statusline JSON forwarded by scripts/cachewatch-statusline.sh.
 /// One short-lived connection per statusline render: read until EOF, decode, emit.
@@ -15,7 +20,12 @@ public enum StatuslineListener {
 
     private static func run(socketPath: String, continuation: AsyncStream<StatuslinePayload>.Continuation) {
         unlink(socketPath)
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        #if os(Linux)
+        let streamSocketType = Int32(SOCK_STREAM.rawValue)
+        #else
+        let streamSocketType = SOCK_STREAM
+        #endif
+        let fd = socket(AF_UNIX, streamSocketType, 0)
         guard fd >= 0 else { return }
 
         var addr = sockaddr_un()

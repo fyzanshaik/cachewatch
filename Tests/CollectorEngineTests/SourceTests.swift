@@ -52,6 +52,62 @@ struct SourceTests {
         #expect(entries.first?.sessionId == "alive", "live session id")
     }
 
+    @Test
+    func parsesOpenCodexRolloutsFromLsof() throws {
+        let output = """
+        p37053
+        ccodex
+        n/home/dev/.codex/sessions/2026/07/25/rollout-parent.jsonl
+        n/home/dev/.codex/sessions/2026/07/25/rollout-child.jsonl
+        p37545
+        ccodex-code-mode
+        n/home/dev/.codex/logs_2.sqlite
+        p50802
+        ccodex
+        n/home/dev/.codex/sessions/2026/07/25/rollout-other.jsonl
+        """
+        let sessions = URL(fileURLWithPath: "/home/dev/.codex/sessions")
+        let open = CodexSessionSource.parseLsof(output, sessionsDirectory: sessions)
+        #expect(open.map(\.pid) == [37053, 37053, 50802])
+        #expect(open.map(\.file.lastPathComponent) == [
+            "rollout-parent.jsonl", "rollout-child.jsonl", "rollout-other.jsonl",
+        ])
+    }
+
+    @Test
+    func codexSourceConsumesOnlyCompleteAppendedLines() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "cw-codex-\(UUID().uuidString)")
+        let sessions = root.appending(path: "sessions/2026/07/25")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let file = sessions.appending(path: "rollout-live.jsonl")
+        try Data(contentsOf: fixtureURL("codex-rollout.jsonl")).write(to: file)
+        let open = [CodexOpenRollout(pid: 4242, file: file)]
+        var source = CodexSessionSource(directory: root.appending(path: "sessions"))
+
+        #expect(source.poll(openRollouts: open).first?.1.status == .idle)
+
+        let handle = try FileHandle(forWritingTo: file)
+        handle.seekToEndOfFile()
+        handle.write(Data(#"{"timestamp":"2026-07-25T08:30:00Z","type":"event_msg","payload":{"type":"task_started"}}"#.utf8))
+        handle.write(Data("\n".utf8))
+        try handle.close()
+        #expect(source.poll(openRollouts: open).first?.1.status == .busy)
+
+        let partial = try FileHandle(forWritingTo: file)
+        partial.seekToEndOfFile()
+        partial.write(Data(#"{"timestamp":"2026-07-25T08:31:00Z","type":"event_msg","payload":{"type":"task_complete"}}"#.utf8))
+        try partial.close()
+        #expect(source.poll(openRollouts: open).first?.1.status == .busy)
+
+        let newline = try FileHandle(forWritingTo: file)
+        newline.seekToEndOfFile()
+        newline.write(Data("\n".utf8))
+        try newline.close()
+        #expect(source.poll(openRollouts: open).first?.1.status == .idle)
+    }
+
     // MARK: - Transcript tailing
 
     @Test

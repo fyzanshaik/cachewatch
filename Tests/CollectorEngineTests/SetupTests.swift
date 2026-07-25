@@ -53,4 +53,38 @@ struct SetupTests {
         let settings = try dict(result.settings)
         #expect(settings["statusLine"] != nil, "statusLine present")
     }
+
+    @Test
+    func installerWritesExecutableScriptBacksUpSettingsAndIsIdempotent() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appending(path: "cw-install-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let claudeDirectory = home.appending(path: ".claude")
+        try FileManager.default.createDirectory(at: claudeDirectory, withIntermediateDirectories: true)
+        let settings = claudeDirectory.appending(path: "settings.json")
+        let existing = Data(#"{"model":"claude-fable-5"}"#.utf8)
+        try existing.write(to: settings)
+
+        let now = Date(timeIntervalSince1970: 1_784_900_000)
+        let first = try StatuslineInstaller.install(homeDirectory: home, now: now)
+        #expect(first.configurationChanged)
+        let backupURL = try #require(first.backupURL)
+        #expect(backupURL.lastPathComponent == "settings.json.bak-cachewatch-1784900000")
+        #expect(try Data(contentsOf: backupURL) == existing)
+
+        let scriptData = try Data(contentsOf: first.scriptURL)
+        #expect(String(decoding: scriptData, as: UTF8.self).contains("nc -U -w 1"))
+        let attributes = try FileManager.default.attributesOfItem(atPath: first.scriptURL.path)
+        let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+        #expect(permissions.intValue & 0o777 == 0o755)
+
+        let configured = try dict(Data(contentsOf: first.settingsURL))
+        let statusLine = try #require(configured["statusLine"] as? NSDictionary)
+        #expect(statusLine["command"] as? String == "~/.cachewatch/cachewatch-statusline.sh")
+
+        let second = try StatuslineInstaller.install(homeDirectory: home, now: now.addingTimeInterval(1))
+        #expect(!second.configurationChanged)
+        #expect(second.backupURL == nil)
+    }
 }

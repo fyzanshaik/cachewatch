@@ -9,6 +9,7 @@ public enum CacheState: Sendable, Equatable {
 public struct SessionSnapshot: Sendable, Equatable, Identifiable {
     public let sessionId: String
     public let pid: Int32
+    public let provider: SessionProvider
     public let name: String?
     public let cwd: String
     public let status: SessionRegistryEntry.Status
@@ -37,10 +38,11 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
 
     public var id: String { sessionId }
 
-    public init(sessionId: String, pid: Int32, name: String?, cwd: String,
+    public init(sessionId: String, pid: Int32, provider: SessionProvider = .claude, name: String?, cwd: String,
                 status: SessionRegistryEntry.Status, startedAt: Date, updatedAt: Date) {
         self.sessionId = sessionId
         self.pid = pid
+        self.provider = provider
         self.name = name
         self.cwd = cwd
         self.status = status
@@ -58,8 +60,12 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
 
 public struct FleetSnapshot: Sendable, Equatable {
     public var sessions: [SessionSnapshot] = []
+    /// Claude Code subscription/API rate limits from its statusline payload.
     public var rateLimits: StatuslinePayload.RateLimits?
     public var rateLimitsAsOf: Date?
+    /// Codex ChatGPT rate limits reconstructed from live rollout token events.
+    public var codexRateLimits: StatuslinePayload.RateLimits?
+    public var codexRateLimitsAsOf: Date?
     /// API-priced spend across all sessions and subagents since launch replay.
     public var cumulativeTurnCostUSD = 0.0
     public var calibration = QuotaCalibrator()
@@ -70,6 +76,7 @@ public struct FleetSnapshot: Sendable, Equatable {
 public enum CollectorEvent: Sendable {
     case registrySnapshot([SessionRegistryEntry])
     case assistantTurn(AssistantTurn)
+    case codexSession(CodexRolloutSnapshot)
     case statusline(StatuslinePayload, receivedAt: Date)
     case memorySample(pid: Int32, residentBytes: UInt64, host: ProcessTree.Host? = nil)
 }
@@ -100,6 +107,8 @@ public struct FleetReducer: Sendable {
     private var hostByPid: [Int32: ProcessTree.Host?] = [:]
     private var rateLimits: StatuslinePayload.RateLimits?
     private var rateLimitsAsOf: Date?
+    private var codexRateLimits: StatuslinePayload.RateLimits?
+    private var codexRateLimitsAsOf: Date?
     private var cumulativeTurnCostUSD = 0.0
     private var calibration: QuotaCalibrator
 
@@ -150,6 +159,26 @@ public struct FleetReducer: Sendable {
                 if let ttl = usage.cacheTTL { e.cacheTTL = ttl }
             }
             enrichments[turn.sessionId] = e
+
+        case .codexSession(let session):
+            var enrichment = enrichments[session.sessionId] ?? Enrichment()
+            enrichment.model = session.model ?? enrichment.model
+            enrichment.gitBranch = session.gitBranch ?? enrichment.gitBranch
+            enrichment.contextTokens = session.contextTokens ?? enrichment.contextTokens
+            enrichment.contextUsedPercentage = session.contextUsedPercentage ?? enrichment.contextUsedPercentage
+            enrichment.lastTurnAt = session.lastTurnAt ?? enrichment.lastTurnAt
+            enrichments[session.sessionId] = enrichment
+
+            if let limits = session.rateLimits {
+                let merged = StatuslinePayload.RateLimits(
+                    fiveHour: mergeWindow(current: codexRateLimits?.fiveHour, incoming: limits.fiveHour),
+                    sevenDay: mergeWindow(current: codexRateLimits?.sevenDay, incoming: limits.sevenDay)
+                )
+                if merged != codexRateLimits {
+                    codexRateLimits = merged
+                    codexRateLimitsAsOf = session.lastTurnAt ?? session.updatedAt
+                }
+            }
 
         case .statusline(let payload, let receivedAt):
             var e = enrichments[payload.sessionId] ?? Enrichment()
@@ -202,6 +231,8 @@ public struct FleetReducer: Sendable {
         var fleet = FleetSnapshot()
         fleet.rateLimits = rateLimits
         fleet.rateLimitsAsOf = rateLimitsAsOf
+        fleet.codexRateLimits = codexRateLimits
+        fleet.codexRateLimitsAsOf = codexRateLimitsAsOf
         fleet.cumulativeTurnCostUSD = cumulativeTurnCostUSD
         fleet.calibration = calibration
         fleet.sessions = registry.map { entry in
@@ -209,6 +240,7 @@ public struct FleetReducer: Sendable {
             var s = SessionSnapshot(
                 sessionId: entry.sessionId,
                 pid: entry.pid,
+                provider: entry.provider,
                 name: entry.name,
                 cwd: entry.cwd,
                 status: entry.status,
