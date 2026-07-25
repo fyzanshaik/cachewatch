@@ -4,7 +4,7 @@
 
 <h1 align="center">Cachewatch</h1>
 
-<p align="center">A macOS menu bar app and Linux terminal monitor for all your Claude Code and Codex sessions: live status, context, quota, per-session memory, and Claude prompt-cache TTL.</p>
+<p align="center">A macOS menu bar app and Linux GNOME top-bar/terminal monitor for all your Claude Code and Codex sessions: live status, context, quota, per-session memory, and Claude prompt-cache TTL.</p>
 
 <p align="center">
   <img src="assets/screenshot.png" width="700" alt="Cachewatch fleet panel">
@@ -24,7 +24,7 @@ Claude Code and Codex show you one session at a time. Run several in parallel an
 
 ## Features
 
-- **Fleet view.** Every live Claude Code and Codex session: agent, project, branch, model, context, status, memory of its full process tree including MCP servers, and last turn. macOS adds the hosting terminal app, click-to-focus, context bars, and menu bar waiting count; Linux renders a live terminal table.
+- **Fleet view.** Every live Claude Code and Codex session: agent, project, branch, model, context, status, memory of its full process tree including MCP servers, and last turn. macOS adds the hosting terminal app, click-to-focus, context bars, and menu bar waiting count. Linux includes a native GNOME top-bar dropdown and a live terminal table.
 - **Cache state.** Claude sessions show warm or cold with a live countdown, read from the TTL buckets Claude Code actually wrote, not inferred. Detects silent cache misses too: turns that paid a full rewrite when the cache should have been warm (typically after upgrades or resume). Codex does not currently persist an equivalent TTL signal, so Cachewatch leaves its cache state unknown.
 - **Cost to resume.** Cold sessions show what the rewrite will cost at your next prompt. Dollars on API billing. On a subscription it shows `~N% 5h` instead, using a conversion rate fitted from your own account: Cachewatch prices every turn at API rates and pairs that with the server-reported quota percent until the ratio converges. The fit persists and keeps improving as you work. Full mechanism, worked examples, and limitations: [docs/calibration.md](docs/calibration.md).
 - **Quota.** Separate Claude and Codex windows with reset countdowns. Values merge monotonically per window so stale data from idle sessions can never make quota go backwards. On macOS, Claude quota survives restarts and every Claude sample is logged to a 30-day history file for burn-rate analysis.
@@ -48,9 +48,9 @@ Codex discovery uses `lsof` to join only rollout files held open by live Codex p
 
 ## Install
 
-The native menu bar app needs macOS 15+ on Apple silicon. The Linux terminal
-frontend needs Swift 6, `lsof`, `ps`, and an `nc` implementation with Unix
-socket support.
+The native menu bar app needs macOS 15+ on Apple silicon. The Linux frontends
+need Swift 6, `lsof`, `ps`, and an `nc` implementation with Unix socket
+support. The optional top-bar frontend supports GNOME Shell 45 through 48.
 
 > [!IMPORTANT]
 > Current public releases are ad-hoc signed and are not notarized by Apple. The
@@ -130,10 +130,24 @@ cachewatch                 # live terminal view; Ctrl-C exits
 cachewatch dump            # one-shot fleet table
 ```
 
-Use Swift 6 or newer and ensure `~/.local/bin` is on `PATH`. The Linux frontend
-shows the canonical fleet and quota snapshots but does not currently provide
-desktop notifications, terminal focusing, session termination controls, or the
-macOS notch panel.
+For the GNOME top-bar dropdown, the repository includes an installer that
+builds the same CLI and installs the extension for the current user:
+
+```sh
+./scripts/install-gnome-extension.sh
+```
+
+If the script says GNOME Shell needs to reload, log out and back in on Wayland
+(or press Alt-F2 and enter `r` on X11), then run:
+
+```sh
+gnome-extensions enable cachewatch@cneuralnetwork.github.com
+```
+
+Use Swift 6 or newer and ensure `~/.local/bin` is on `PATH`. Both Linux
+frontends show the canonical fleet and quota snapshots. Linux does not
+currently provide desktop notifications, terminal focusing, session
+termination controls, or the macOS notch panel.
 
 ### Statusline hookup
 
@@ -148,7 +162,7 @@ This installs the forwarder script to `~/.cachewatch/` and adds it to `~/.claude
 The macOS app stores preferences at
 `~/Library/Application Support/Cachewatch/state.json`. All alert rules have an
 `enabled` flag and thresholds; missing fields fall back to defaults so upgrades
-never migrate. The Linux terminal frontend does not persist UI preferences.
+never migrate. The Linux frontends do not persist UI preferences.
 
 ## Caveats
 
@@ -168,8 +182,10 @@ xcodebuild -project Cachewatch.xcodeproj -scheme Cachewatch \
 Engine logic lives in `Sources/CollectorEngine` with no UI imports. SwiftPM
 selects the thin SwiftUI shell in `Sources/Cachewatch` on macOS and the terminal
 entry point in `Sources/CachewatchCLI` on Linux; the Xcode app target continues
-to use the SwiftUI sources. New data enters as a source emitting events into the
-reducer, and new features are derivations on the snapshot.
+to use the SwiftUI sources. The GNOME extension consumes the CLI's versioned
+newline-delimited JSON snapshot stream and performs presentation only. New data
+enters as a source emitting events into the reducer, and new features are
+derivations on the snapshot.
 
 ## License
 

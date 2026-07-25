@@ -1,0 +1,162 @@
+.cachewatch-panel {
+  spacing: 6px;
+}
+
+.cachewatch-panel-label {
+  font-weight: 700;
+  min-width: 1.4em;
+}
+
+.cachewatch-header {
+  padding: 12px 14px 10px;
+  min-width: 360px;
+}
+
+.cachewatch-header-title {
+  font-size: 1.1em;
+  font-weight: 800;
+}
+
+.cachewatch-header-summary {
+  color: rgba(255, 255, 255, 0.62);
+  padding-top: 3px;
+}
+
+.cachewatch-live-pill {
+  background-color: rgba(53, 220, 116, 0.15);
+  color: rgb(53, 220, 116);
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.cachewatch-section-label {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.78em;
+  font-weight: 800;
+  padding: 8px 14px 4px;
+}
+
+.cachewatch-quota-item {
+  padding: 7px 14px;
+}
+
+.cachewatch-quota-copy {
+  spacing: 4px;
+  width: 112px;
+}
+
+.cachewatch-quota-provider {
+  font-weight: 700;
+}
+
+.cachewatch-muted {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.cachewatch-progress-track {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  height: 7px;
+  width: 126px;
+}
+
+.cachewatch-progress-fill {
+  background-color: rgb(53, 220, 116);
+  border-radius: 999px;
+  height: 7px;
+}
+
+.cachewatch-progress-fill.warning {
+  background-color: rgb(255, 190, 54);
+}
+
+.cachewatch-progress-fill.danger {
+  background-color: rgb(255, 90, 95);
+}
+
+.cachewatch-percent {
+  font-feature-settings: "tnum";
+  font-weight: 800;
+  text-align: right;
+  width: 42px;
+}
+
+.cachewatch-session-item {
+  margin: 3px 8px;
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+.cachewatch-session-item:hover,
+.cachewatch-session-item:focus {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.cachewatch-provider {
+  border-radius: 6px;
+  font-size: 0.72em;
+  font-weight: 900;
+  padding: 3px 6px;
+}
+
+.cachewatch-provider.claude {
+  background-color: rgba(91, 194, 231, 0.14);
+  color: rgb(91, 194, 231);
+}
+
+.cachewatch-provider.codex {
+  background-color: rgba(197, 139, 255, 0.14);
+  color: rgb(197, 139, 255);
+}
+
+.cachewatch-session-name {
+  font-weight: 800;
+  padding-left: 7px;
+}
+
+.cachewatch-status {
+  font-size: 0.76em;
+  font-weight: 800;
+}
+
+.cachewatch-status.busy {
+  color: rgb(91, 194, 231);
+}
+
+.cachewatch-status.idle {
+  color: rgb(53, 220, 116);
+}
+
+.cachewatch-status.waiting {
+  color: rgb(255, 190, 54);
+}
+
+.cachewatch-session-detail {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.88em;
+  padding-top: 5px;
+}
+
+.cachewatch-empty {
+  color: rgba(255, 255, 255, 0.62);
+  padding: 18px 14px;
+  min-width: 340px;
+}
+
+.cachewatch-error-title {
+  color: rgb(255, 190, 54);
+  font-weight: 800;
+  padding-bottom: 6px;
+}
+
+.cachewatch-error-copy {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.cachewatch-footer {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.78em;
+  padding: 7px 14px 10px;
+}

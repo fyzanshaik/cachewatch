@@ -14,6 +14,12 @@ enum Main {
             await watch()
         case "dump":
             print(TerminalFleetRenderer.render(Collector.dump()))
+        case "stream":
+            guard CommandLine.arguments.dropFirst(2).elementsEqual(["--json"]) else {
+                FileHandle.standardError.write(Data("Usage: cachewatch stream --json\n".utf8))
+                exit(64)
+            }
+            await streamJSON()
         case "setup":
             runSetup()
         case "--version", "version":
@@ -26,6 +32,22 @@ enum Main {
             }
             printHelp()
             exit(64)
+        }
+    }
+
+    private static func streamJSON() async {
+        let collector = Collector()
+        await collector.start()
+        for await fleet in await collector.snapshots {
+            do {
+                var data = try TerminalFleetJSON.encode(fleet)
+                data.append(0x0A)
+                FileHandle.standardOutput.write(data)
+            } catch {
+                FileHandle.standardError.write(
+                    Data("Could not encode fleet snapshot: \(error.localizedDescription)\n".utf8)
+                )
+            }
         }
     }
 
@@ -80,6 +102,8 @@ enum Main {
         Commands:
           watch       Live terminal fleet view (default)
           dump        Print one fleet snapshot and exit
+          stream --json
+                      Stream newline-delimited JSON snapshots for desktop frontends
           setup       Install and configure the Claude Code statusline forwarder
           version     Print the Cachewatch version
           help        Show this help

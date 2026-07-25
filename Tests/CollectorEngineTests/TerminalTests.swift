@@ -89,4 +89,85 @@ struct TerminalTests {
         #expect(ansi.contains("LIVE"))
         #expect(ansi.contains("Ctrl-C to stop"))
     }
+
+    @Test
+    func encodesStableFleetJSONForDesktopFrontends() throws {
+        var session = SessionSnapshot(
+            sessionId: "codex-1234",
+            pid: 43,
+            provider: .codex,
+            name: "cachewatch",
+            cwd: "/tmp/cachewatch",
+            status: .busy,
+            startedAt: now.addingTimeInterval(-600),
+            updatedAt: now
+        )
+        session.model = "gpt-5.6-sol"
+        session.gitBranch = "agent/codex-linux-support"
+        session.contextTokens = 80_000
+        session.contextUsedPercentage = 31
+        session.lastTurnAt = now.addingTimeInterval(-45)
+        session.memoryBytes = 766_000_000
+
+        var claude = SessionSnapshot(
+            sessionId: "claude-1234",
+            pid: 44,
+            name: "api",
+            cwd: "/tmp/api",
+            status: .waiting,
+            startedAt: now.addingTimeInterval(-1_200),
+            updatedAt: now
+        )
+        claude.lastTurnAt = now.addingTimeInterval(-120)
+        claude.cacheTTL = .fiveMinutes
+
+        var fleet = FleetSnapshot()
+        fleet.sessions = [session, claude]
+        fleet.rateLimits = StatuslinePayload.RateLimits(
+            fiveHour: StatuslinePayload.RateLimitWindow(
+                usedPercentage: 43,
+                resetsAt: now.addingTimeInterval(3_600)
+            ),
+            sevenDay: nil
+        )
+        fleet.codexRateLimits = StatuslinePayload.RateLimits(
+            fiveHour: nil,
+            sevenDay: StatuslinePayload.RateLimitWindow(
+                usedPercentage: 5,
+                resetsAt: now.addingTimeInterval(86_400)
+            )
+        )
+
+        let data = try TerminalFleetJSON.encode(fleet, now: now)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        #expect(object["schemaVersion"] as? Int == 1)
+        #expect(object["generatedAt"] as? Double == now.timeIntervalSince1970)
+
+        let summary = try #require(object["summary"] as? [String: Int])
+        #expect(summary == ["total": 2, "busy": 1, "idle": 0, "waiting": 1])
+
+        let sessions = try #require(object["sessions"] as? [[String: Any]])
+        #expect(sessions.count == 2)
+        #expect(sessions[0]["id"] as? String == "codex-1234")
+        #expect(sessions[0]["provider"] as? String == "codex")
+        #expect(sessions[0]["status"] as? String == "busy")
+        #expect(sessions[0]["contextTokens"] as? Int == 80_000)
+        #expect(sessions[0]["memoryBytes"] as? Int == 766_000_000)
+        #expect(sessions[0]["cacheState"] as? String == "unknown")
+        #expect(sessions[1]["cacheState"] as? String == "warm")
+        #expect(sessions[1]["cacheExpiresAt"] as? Double == now.addingTimeInterval(180).timeIntervalSince1970)
+
+        let quotas = try #require(object["quotas"] as? [[String: Any]])
+        #expect(quotas.count == 2)
+        #expect(quotas[0]["provider"] as? String == "claude")
+        #expect(quotas[0]["window"] as? String == "5h")
+        #expect(quotas[0]["usedPercentage"] as? Double == 43)
+        #expect(quotas[1]["provider"] as? String == "codex")
+        #expect(quotas[1]["window"] as? String == "7d")
+
+        #expect(!data.contains(0x0A))
+    }
 }
