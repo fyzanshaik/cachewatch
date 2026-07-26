@@ -6,7 +6,7 @@ Cachewatch answers that by measuring the conversion rate on your own account. Th
 
 ## Step 1: price every turn
 
-Every assistant turn in every session transcript carries exact token counts. Cachewatch prices each turn at API list rates (`Sources/CollectorEngine/Pricing.swift`):
+Every assistant turn in every session transcript carries exact token counts. Cachewatch prices each turn at the effective-dated [Claude Platform prompt-caching API list rate](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) for that turn's model and timestamp (`Sources/CollectorEngine/Pricing.swift`):
 
 | Token type | Weight |
 |---|---|

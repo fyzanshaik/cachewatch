@@ -26,7 +26,7 @@ Claude Code shows you one session at a time. Run several in parallel and you los
 
 - **Fleet view.** Every live session: project, branch, model, context fill bar, status (idle, busy, needs input), memory of its full process tree including MCP servers, and which terminal app hosts it (click to focus). Sessions waiting on you sort first and show a count in the menu bar icon.
 - **Cache state.** Warm or cold with a live countdown, read from the TTL buckets Claude Code actually wrote, not inferred. Detects silent cache misses too: turns that paid a full rewrite when the cache should have been warm (typically after upgrades or resume).
-- **Cost to resume.** Cold sessions show what the rewrite will cost at your next prompt. Dollars on API billing. On a subscription it shows `~N% 5h` instead, using a conversion rate fitted from your own account: Cachewatch prices every turn at API rates and pairs that with the server-reported quota percent until the ratio converges. The fit persists and keeps improving as you work. Full mechanism, worked examples, and limitations: [docs/calibration.md](docs/calibration.md).
+- **Cost to resume.** Cold sessions show an estimate of what the rewrite will cost at your next prompt. Dollar estimates use the API list rate effective at resume time. On a subscription it shows `~N% 5h` instead, using a conversion rate fitted from your own account: Cachewatch prices every historical turn at the rate effective when it occurred and pairs that with the server-reported quota percent until the ratio converges. The fit persists and keeps improving as you work. Full mechanism, worked examples, and limitations: [docs/calibration.md](docs/calibration.md).
 - **Quota.** 5-hour and weekly bars with reset countdowns. Values merge monotonically per window so stale data from idle sessions can never make your quota go backwards. Survives restarts, and every sample is logged to a 30-day history file for burn-rate analysis.
 - **Notifications.** Quota crossing 80%, a big cache about to die, a session stuck waiting for input, a long turn finishing, heavy idle sessions, silent cache misses. Each fires once, survives restarts, and can be disabled individually. On notched Macs they animate out of the notch.
 - **Notch panel, opt-in.** Nothing is displayed at the notch by default. Turn it on and hovering the notch dead zone opens the fleet panel right there.
@@ -118,7 +118,7 @@ This installs the forwarder script to `~/.cachewatch/` and adds it to `~/.claude
 
 - The session registry, transcript schema, and statusline JSON are undocumented Claude Code internals. They have changed without notice before. Parsers are tested against real captured payloads and fail per-field, but an update can still break things; file an issue with a captured payload.
 - The TTL countdown is a client-side expectation. Refresh-on-read is documented, guaranteed retention is not.
-- Dollar figures use API list prices. Quota percent figures are estimates measured from your account, since the real formula is unpublished.
+- Cold-resume dollar figures are estimates based on effective-dated [Claude Platform prompt-caching API list prices](https://platform.claude.com/docs/en/build-with-claude/prompt-caching). Session totals are reported by Claude Code. Quota percent figures are estimates measured from your account, since the real formula is unpublished.
 
 ## Development
 

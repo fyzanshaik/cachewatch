@@ -17,9 +17,9 @@ struct CalibrationTests {
             cacheReadInputTokens: 100_000, cacheCreationInputTokens: 10_000,
             ephemeral5mTokens: 0, ephemeral1hTokens: 10_000
         )
-        let cost = Pricing.turnCostUSD(model: "claude-opus-4-8", usage: usage)
+        let cost = Pricing.turnCostUSD(model: "claude-opus-4-8", usage: usage, at: base)
         #expect(abs((cost ?? 0) - 0.1755) < 0.0001, "weighted cost, got \(String(describing: cost))")
-        #expect(Pricing.turnCostUSD(model: "unknown-model", usage: usage) == nil, "unknown model")
+        #expect(Pricing.turnCostUSD(model: "unknown-model", usage: usage, at: base) == nil, "unknown model")
     }
 
     @Test

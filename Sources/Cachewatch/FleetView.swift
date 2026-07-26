@@ -238,6 +238,7 @@ private struct SessionRow: View {
                 Text(Format.memory(session.memoryBytes))
                 if let cost = session.costUSD, cost > 0 {
                     Text(cost, format: .currency(code: "USD"))
+                        .help("Total cost reported by Claude Code for this session")
                 }
                 Spacer()
                 // Both trailing views live in one ZStack so hover toggles opacity,
@@ -324,17 +325,19 @@ private struct SessionRow: View {
             HStack(spacing: 4) {
                 Text("cold")
                     .foregroundStyle(.secondary)
-                if let resume = Pricing.costToResume(for: session, at: now) {
+                if let estimate = Pricing.costToResumeEstimate(for: session, at: now) {
+                    let resume = estimate.costUSD
+                    let basis = resumeCostBasis(estimate)
                     // On a Plan with a fitted calibration, speak in quota; else dollars.
                     if fleet.rateLimits != nil,
                        let pct = fleet.calibration.percentOfWindow(forCost: resume) {
                         Text("~\(pct, format: .number.precision(.fractionLength(pct < 1 ? 1 : 0)))% 5h")
                             .foregroundStyle(.orange.opacity(0.9))
-                            .help("Cost to resume as a share of your 5-hour window, from observed quota burn on this account")
+                            .help("Estimated share of your 5-hour window from observed quota burn. \(basis)")
                     } else {
                         Text("~\(resume, format: .currency(code: "USD"))")
                             .foregroundStyle(.orange.opacity(0.9))
-                            .help("Cost to resume: the full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
+                            .help(basis)
                     }
                 }
             }
@@ -343,5 +346,14 @@ private struct SessionRow: View {
         case .unknown:
             EmptyView()
         }
+    }
+
+    private func resumeCostBasis(_ estimate: ResumeCostEstimate) -> String {
+        let model = session.model ?? estimate.modelPrice.match
+        let ttl = estimate.cacheTTL == .oneHour ? "1h" : "5m"
+        return "Estimated full-context rewrite for \(model): "
+            + "$\(estimate.modelPrice.inputPerMTok)/MTok base x "
+            + "\(estimate.cacheWriteMultiplier) \(ttl) cache write. "
+            + "Source: \(estimate.modelPrice.sourceURL.absoluteString)"
     }
 }
