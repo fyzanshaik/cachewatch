@@ -130,7 +130,11 @@ public struct FleetReducer: Sendable {
 
         case .assistantTurn(let turn):
             if let usage = turn.usage, let model = turn.model,
-               let cost = Pricing.turnCostUSD(model: model, usage: usage) {
+               let cost = Pricing.turnCostUSD(
+                   model: model,
+                   usage: usage,
+                   at: turn.timestamp
+               ) {
                 cumulativeTurnCostUSD += cost
             }
             guard !turn.isSidechain else { return }

@@ -5,6 +5,7 @@ import CollectorEngine
 @Suite
 struct PricingTests {
     let now = Date(timeIntervalSince1970: 1_784_800_000)
+    let sonnet5RateChange = Date(timeIntervalSince1970: 1_788_220_800)
 
     func coldSession(model: String, context: Int, ttl: CacheTTL = .oneHour) -> SessionSnapshot {
         var s = SessionSnapshot(
@@ -38,6 +39,100 @@ struct PricingTests {
         #expect(Pricing.costToResume(for: unknownModel, at: now) == nil, "unknown model rate")
         unknownModel.model = nil
         #expect(Pricing.costToResume(for: unknownModel, at: now) == nil, "missing model")
+    }
+
+    @Test
+    func sonnet5RateChangesAtSeptemberBoundaryUTC() {
+        let instantBefore = sonnet5RateChange.addingTimeInterval(-1)
+
+        #expect(Pricing.baseInputRate(model: "claude-sonnet-5", at: instantBefore) == 2.0)
+        #expect(Pricing.baseInputRate(model: "claude-sonnet-5", at: sonnet5RateChange) == 3.0)
+    }
+
+    @Test
+    func resolverExposesEffectivePricingBasisAndSource() {
+        let instantBefore = sonnet5RateChange.addingTimeInterval(-1)
+        let source = "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+
+        let before = Pricing.modelPrice(model: "claude-sonnet-5", at: instantBefore)
+        #expect(before?.match == "sonnet-5")
+        #expect(before?.effectiveUntil == sonnet5RateChange)
+        #expect(before?.inputPerMTok == 2.0)
+        #expect(before?.sourceURL.absoluteString == source)
+
+        let atBoundary = Pricing.modelPrice(
+            model: "claude-sonnet-5",
+            at: sonnet5RateChange
+        )
+        #expect(atBoundary?.match == "sonnet-5")
+        #expect(atBoundary?.effectiveFrom == sonnet5RateChange)
+        #expect(atBoundary?.effectiveUntil == nil)
+        #expect(atBoundary?.inputPerMTok == 3.0)
+        #expect(atBoundary?.sourceURL.absoluteString == source)
+    }
+
+    @Test
+    func turnAndResumeCostsUseTheirExplicitTimestamps() {
+        let instantBefore = sonnet5RateChange.addingTimeInterval(-1)
+        let usage = TurnUsage(
+            inputTokens: 1_000_000, outputTokens: 0,
+            cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
+            ephemeral5mTokens: 0, ephemeral1hTokens: 0
+        )
+
+        #expect(Pricing.turnCostUSD(
+            model: "claude-sonnet-5", usage: usage, at: instantBefore
+        ) == 2.0)
+        #expect(Pricing.turnCostUSD(
+            model: "claude-sonnet-5", usage: usage, at: sonnet5RateChange
+        ) == 3.0)
+        let beforeEstimate = Pricing.costToResumeEstimate(
+            for: coldSession(model: "claude-sonnet-5", context: 1_000_000),
+            at: instantBefore
+        )
+        #expect(beforeEstimate?.costUSD == 4.0)
+        #expect(beforeEstimate?.modelPrice.inputPerMTok == 2.0)
+        #expect(beforeEstimate?.cacheTTL == .oneHour)
+        #expect(beforeEstimate?.cacheWriteMultiplier == 2.0)
+
+        let boundaryEstimate = Pricing.costToResumeEstimate(
+            for: coldSession(model: "claude-sonnet-5", context: 1_000_000),
+            at: sonnet5RateChange
+        )
+        #expect(boundaryEstimate?.costUSD == 6.0)
+        #expect(boundaryEstimate?.modelPrice.inputPerMTok == 3.0)
+    }
+
+    @Test
+    func modelMatchingPrefersSpecificRatesAndUnknownModelsStayNil() {
+        let specific = Pricing.modelPrice(model: "claude-opus-4-8", at: now)
+        #expect(specific?.match == "opus-4-8")
+        #expect(specific?.inputPerMTok == 5.0)
+        #expect(Pricing.baseInputRate(model: "claude-opus-4-1", at: now) == 15.0)
+        #expect(Pricing.baseInputRate(model: "claude-opus-4", at: now) == 15.0)
+        #expect(Pricing.modelPrice(model: "claude-mystery-9", at: now) == nil)
+        #expect(Pricing.baseInputRate(model: "claude-mystery-9", at: now) == nil)
+    }
+
+    @Test
+    func reducerPricesHistoricalTurnsAtEachTurnTimestamp() {
+        let instantBefore = sonnet5RateChange.addingTimeInterval(-1)
+        let usage = TurnUsage(
+            inputTokens: 1_000_000, outputTokens: 0,
+            cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
+            ephemeral5mTokens: 0, ephemeral1hTokens: 0
+        )
+        var reducer = FleetReducer()
+        reducer.apply(.assistantTurn(AssistantTurn(
+            sessionId: "before", timestamp: instantBefore, model: "claude-sonnet-5",
+            gitBranch: nil, isSidechain: false, usage: usage
+        )))
+        reducer.apply(.assistantTurn(AssistantTurn(
+            sessionId: "at", timestamp: sonnet5RateChange, model: "claude-sonnet-5",
+            gitBranch: nil, isSidechain: false, usage: usage
+        )))
+
+        #expect(reducer.snapshot.cumulativeTurnCostUSD == 5.0)
     }
 }
 
