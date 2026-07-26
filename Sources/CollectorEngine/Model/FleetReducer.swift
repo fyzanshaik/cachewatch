@@ -23,6 +23,9 @@ public struct SessionSnapshot: Sendable, Equatable, Identifiable {
     public var costUSD: Double?
     public var contextUsedPercentage: Double?
     public var memoryBytes: UInt64?
+    /// Launch-replayed cache evidence. Nil until an assistant turn for this
+    /// session has been observed; sidechain usage remains separately labeled.
+    public var cacheSummary: SessionCacheSummary?
     /// Timestamp of the last turn that paid a full rewrite while the cache should
     /// have been warm — the silent cache-miss signature (resume/upgrade regressions).
     public var lastCacheMissAt: Date?
@@ -75,9 +78,17 @@ public enum CollectorEvent: Sendable {
 }
 
 /// Pure state machine: every source feeds events in, the canonical FleetSnapshot comes out.
-/// Enrichment (turns, statusline) is keyed by sessionId and outlives registry churn, so
-/// out-of-order arrival across sources converges to the same snapshot.
+/// Enrichment is keyed by sessionId and outlives registry churn. Transcript turns
+/// are applied in their JSONL replay order, even when the registry arrives later.
 public struct FleetReducer: Sendable {
+    private struct LargeWriteCandidate: Sendable {
+        let createdAt: Date
+        let writeTokens: Int
+        let baselineReadTokens: Int
+        let ttl: CacheTTL
+        var effectiveExpiresAt: Date
+    }
+
     private struct Enrichment {
         var model: String?
         var gitBranch: String?
@@ -86,7 +97,11 @@ public struct FleetReducer: Sendable {
         var cacheTTL: CacheTTL?
         var costUSD: Double?
         var contextUsedPercentage: Double?
-        var lastCacheMissAt: Date?
+        var cacheSummary = SessionCacheSummary()
+        var latestLargeWrite: LargeWriteCandidate?
+        var latestCacheEvidenceAt: Date?
+        var latestCompleteCacheTurnAt: Date?
+        var latestCompleteCacheTTL: CacheTTL?
         var lastBusyEndAt: Date?
         var lastBusyDuration: TimeInterval?
     }
@@ -133,21 +148,53 @@ public struct FleetReducer: Sendable {
                let cost = Pricing.turnCostUSD(model: model, usage: usage) {
                 cumulativeTurnCostUSD += cost
             }
-            guard !turn.isSidechain else { return }
             var e = enrichments[turn.sessionId] ?? Enrichment()
-            if let usage = turn.usage,
-               let previousTurnAt = e.lastTurnAt, let previousTTL = e.cacheTTL,
-               turn.timestamp < previousTurnAt.addingTimeInterval(previousTTL.duration),
-               usage.cacheReadInputTokens == 0,
-               usage.cacheCreationInputTokens >= Self.cacheMissMinRewriteTokens {
-                e.lastCacheMissAt = turn.timestamp
+            if turn.isSidechain {
+                e.cacheSummary.recordSidechain(turn.usage)
+                enrichments[turn.sessionId] = e
+                return
             }
-            e.lastTurnAt = turn.timestamp
-            if let model = turn.model { e.model = model }
-            if let branch = turn.gitBranch { e.gitBranch = branch }
-            if let usage = turn.usage {
-                e.contextTokens = usage.contextTokens
-                if let ttl = usage.cacheTTL { e.cacheTTL = ttl }
+
+            e.cacheSummary.recordMainChain(turn.usage)
+            if e.latestCacheEvidenceAt.map({ turn.timestamp >= $0 }) ?? true {
+                if let usage = turn.usage, usage.isComplete {
+                    if let previousTurnAt = e.latestCompleteCacheTurnAt,
+                       let previousTTL = e.latestCompleteCacheTTL,
+                       turn.timestamp < previousTurnAt.addingTimeInterval(previousTTL.duration),
+                       usage.cacheReadInputTokens == 0,
+                       usage.cacheCreationInputTokens >= Self.cacheMissMinRewriteTokens {
+                        e.cacheSummary.recordFullWarmMiss(at: turn.timestamp)
+                    }
+                    recordLargeWriteEvidence(
+                        usage: usage,
+                        timestamp: turn.timestamp,
+                        enrichment: &e
+                    )
+                    e.latestCompleteCacheTurnAt = turn.timestamp
+                    if usage.cacheCreationInputTokens > 0 {
+                        e.latestCompleteCacheTTL = usage.cacheTTL
+                    }
+                } else {
+                    // An intervening unknown usage payload could have read or
+                    // replaced the cache, so later turns cannot safely inherit
+                    // miss/reuse attribution through it.
+                    e.latestCompleteCacheTurnAt = nil
+                    e.latestCompleteCacheTTL = nil
+                    e.latestLargeWrite = nil
+                }
+                e.latestCacheEvidenceAt = turn.timestamp
+            }
+
+            if e.lastTurnAt.map({ turn.timestamp >= $0 }) ?? true {
+                e.lastTurnAt = turn.timestamp
+                if let model = turn.model { e.model = model }
+                if let branch = turn.gitBranch { e.gitBranch = branch }
+                if let usage = turn.usage {
+                    e.contextTokens = usage.contextTokens
+                    if usage.cacheCreationInputTokens > 0 {
+                        e.cacheTTL = usage.cacheTTL
+                    }
+                }
             }
             enrichments[turn.sessionId] = e
 
@@ -182,6 +229,62 @@ public struct FleetReducer: Sendable {
         case .memorySample(let pid, let residentBytes, let host):
             memoryByPid[pid] = residentBytes
             hostByPid[pid] = host
+        }
+    }
+
+    /// Conservative large-write reuse heuristic:
+    /// - main-chain, complete usage only;
+    /// - writes become candidates at 50k tokens;
+    /// - a strictly later turn must arrive before the candidate's effective TTL;
+    /// - its cache read must grow over the write turn's already-cached prefix by
+    ///   at least max(50k, half the write).
+    ///
+    /// A qualifying read refreshes the candidate TTL and increments its later-turn
+    /// reuse count. The current turn is checked before its own write is registered,
+    /// preventing self-attribution. Only the latest candidate is tracked, so one
+    /// later read cannot falsely confirm multiple superseded writes.
+    private func recordLargeWriteEvidence(
+        usage: TurnUsage,
+        timestamp: Date,
+        enrichment: inout Enrichment
+    ) {
+        if var candidate = enrichment.latestLargeWrite {
+            if timestamp >= candidate.effectiveExpiresAt {
+                enrichment.latestLargeWrite = nil
+            } else if timestamp > candidate.createdAt {
+                let requiredGrowth = max(
+                    Self.cacheMissMinRewriteTokens,
+                    (candidate.writeTokens + 1) / 2
+                )
+                let observedGrowth = Int64(usage.cacheReadInputTokens)
+                    - Int64(candidate.baselineReadTokens)
+                if observedGrowth >= Int64(requiredGrowth) {
+                    candidate.effectiveExpiresAt = timestamp.addingTimeInterval(candidate.ttl.duration)
+                    enrichment.cacheSummary.recordLatestLargeWriteReuse(
+                        effectiveExpiresAt: candidate.effectiveExpiresAt
+                    )
+                    enrichment.latestLargeWrite = candidate
+                }
+            }
+        }
+
+        guard usage.cacheCreationInputTokens >= Self.cacheMissMinRewriteTokens else { return }
+        let ttl = usage.cacheTTL
+        let effectiveExpiresAt = ttl.map {
+            timestamp.addingTimeInterval($0.duration)
+        }
+        enrichment.cacheSummary.recordLargeWrite(
+            tokens: usage.cacheCreationInputTokens,
+            effectiveExpiresAt: effectiveExpiresAt
+        )
+        enrichment.latestLargeWrite = ttl.map { ttl in
+            LargeWriteCandidate(
+                createdAt: timestamp,
+                writeTokens: usage.cacheCreationInputTokens,
+                baselineReadTokens: usage.cacheReadInputTokens,
+                ttl: ttl,
+                effectiveExpiresAt: timestamp.addingTimeInterval(ttl.duration)
+            )
         }
     }
 
@@ -223,7 +326,10 @@ public struct FleetReducer: Sendable {
             s.costUSD = e?.costUSD
             s.contextUsedPercentage = e?.contextUsedPercentage
             s.memoryBytes = memoryByPid[entry.pid]
-            s.lastCacheMissAt = e?.lastCacheMissAt
+            if let summary = e?.cacheSummary, summary.observedAssistantTurnCount > 0 {
+                s.cacheSummary = summary
+                s.lastCacheMissAt = summary.lastFullWarmMissAt
+            }
             s.statusChangedAt = entry.statusUpdatedAt
             s.lastBusyEndAt = e?.lastBusyEndAt
             s.lastBusyDuration = e?.lastBusyDuration

@@ -69,6 +69,27 @@ struct ParsingTests {
     }
 
     @Test
+    func incompleteCoreUsageIsMarkedUnknownInsteadOfCountedAsMeasuredZeros() throws {
+        let line = """
+        {"type":"assistant","sessionId":"s","timestamp":"2026-07-19T18:00:00.000Z","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":5,"cache_creation_input_tokens":10,"output_tokens":1}}}
+        """
+        let turns = TranscriptParser.assistantTurns(from: Data(line.utf8))
+        #expect(turns.count == 1, "assistant turn is retained")
+        #expect(turns[0].usage?.isComplete == false, "partial usage is not a measured zero read")
+        #expect(turns[0].usage?.contextTokens == 15, "known legacy fields remain available for context state")
+    }
+
+    @Test
+    func missingCacheWriteBucketIsRetainedAsUnclassified() throws {
+        let line = """
+        {"type":"assistant","sessionId":"s","timestamp":"2026-07-19T18:00:00.000Z","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":5,"cache_creation_input_tokens":100,"cache_read_input_tokens":10,"output_tokens":1}}}
+        """
+        let turns = TranscriptParser.assistantTurns(from: Data(line.utf8))
+        #expect(turns[0].usage?.cacheCreationInputTokens == 100)
+        #expect(turns[0].usage?.unclassifiedCacheCreationTokens == 100)
+    }
+
+    @Test
     func turnWithoutCacheWriteHasNoTTL() throws {
         let line = """
         {"type":"assistant","sessionId":"s","timestamp":"2026-07-19T18:00:00.000Z","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":100,"output_tokens":1,"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0}}}}

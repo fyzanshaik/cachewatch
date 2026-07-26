@@ -19,15 +19,21 @@ public struct TurnUsage: Sendable, Equatable {
     public let cacheCreationInputTokens: Int
     public let ephemeral5mTokens: Int
     public let ephemeral1hTokens: Int
+    /// False when a usage object omitted a core counter. Known values remain
+    /// available for legacy context/pricing behavior, but aggregates must not
+    /// treat the absent fields as measured zeros.
+    public let isComplete: Bool
 
     public init(inputTokens: Int, outputTokens: Int, cacheReadInputTokens: Int,
-                cacheCreationInputTokens: Int, ephemeral5mTokens: Int, ephemeral1hTokens: Int) {
+                cacheCreationInputTokens: Int, ephemeral5mTokens: Int, ephemeral1hTokens: Int,
+                isComplete: Bool = true) {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.cacheReadInputTokens = cacheReadInputTokens
         self.cacheCreationInputTokens = cacheCreationInputTokens
         self.ephemeral5mTokens = ephemeral5mTokens
         self.ephemeral1hTokens = ephemeral1hTokens
+        self.isComplete = isComplete
     }
 
     /// TTL bucket this turn's cache write landed in; nil when nothing was written.
@@ -40,6 +46,12 @@ public struct TurnUsage: Sendable, Equatable {
     /// Total prompt-side tokens = the session's current context size after this turn.
     public var contextTokens: Int {
         cacheReadInputTokens + cacheCreationInputTokens + inputTokens
+    }
+
+    /// Writes whose TTL bucket was absent or changed shape remain explicit
+    /// instead of appearing as zero-valued 5m/1h writes.
+    public var unclassifiedCacheCreationTokens: Int {
+        max(0, cacheCreationInputTokens - ephemeral5mTokens - ephemeral1hTokens)
     }
 }
 
@@ -143,7 +155,11 @@ private extension TurnUsage {
             cacheReadInputTokens: raw.cache_read_input_tokens ?? 0,
             cacheCreationInputTokens: raw.cache_creation_input_tokens ?? 0,
             ephemeral5mTokens: raw.cache_creation?.ephemeral_5m_input_tokens ?? 0,
-            ephemeral1hTokens: raw.cache_creation?.ephemeral_1h_input_tokens ?? 0
+            ephemeral1hTokens: raw.cache_creation?.ephemeral_1h_input_tokens ?? 0,
+            isComplete: raw.input_tokens != nil
+                && raw.output_tokens != nil
+                && raw.cache_read_input_tokens != nil
+                && raw.cache_creation_input_tokens != nil
         )
     }
 }

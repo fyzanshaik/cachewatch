@@ -178,6 +178,7 @@ private struct SessionRow: View {
     let fleet: FleetSnapshot
     @State private var confirmingClose = false
     @State private var hovering = false
+    @State private var cacheDetailsExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -220,7 +221,24 @@ private struct SessionRow: View {
                         .fontWeight(.medium)
                         .foregroundStyle(.orange)
                 }
-                cacheBadge
+                if session.cacheSummary != nil {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            cacheDetailsExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            cacheBadge
+                            Text(cacheDetailsExpanded ? "less" : "insights")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(cacheDetailsExpanded ? "Hide cache evidence" : "Show cache evidence")
+                } else {
+                    cacheBadge
+                }
             }
             HStack(spacing: 10) {
                 Text(Format.model(session.model))
@@ -261,6 +279,10 @@ private struct SessionRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .monospacedDigit()
+            if cacheDetailsExpanded, let summary = session.cacheSummary {
+                CacheInspector(summary: summary, now: now)
+                    .padding(.top, 6)
+            }
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
@@ -343,5 +365,196 @@ private struct SessionRow: View {
         case .unknown:
             EmptyView()
         }
+    }
+}
+
+private struct CacheInspector: View {
+    let summary: SessionCacheSummary
+    let now: Date
+
+    private struct Interpretation {
+        let title: String
+        let evidence: String
+        let action: String
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(interpretation.title)
+                .font(.caption)
+                .fontWeight(.semibold)
+            Text(interpretation.evidence)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(interpretation.action)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
+                counterRow("Measured main turns", "\(summary.mainChain.assistantTurnCount)")
+                if summary.mainChain.missingUsageTurnCount > 0 {
+                    counterRow("Unknown usage turns", "\(summary.mainChain.missingUsageTurnCount)")
+                }
+                counterRow("Input / output", "\(tokens(summary.mainChain.inputTokens)) / \(tokens(summary.mainChain.outputTokens))")
+                counterRow("Cache reads", tokens(summary.mainChain.cacheReadTokens))
+                counterRow(
+                    "Cache writes",
+                    "\(tokens(summary.mainChain.cacheWriteTokens))"
+                        + " · 5m \(tokens(summary.mainChain.cacheWrite5mTokens))"
+                        + " · 1h \(tokens(summary.mainChain.cacheWrite1hTokens))"
+                )
+                if summary.mainChain.unclassifiedCacheWriteTokens > 0 {
+                    counterRow("Unclassified writes", tokens(summary.mainChain.unclassifiedCacheWriteTokens))
+                }
+                counterRow("Cache-eligible ratio", eligibleRatio)
+                counterRow("Full warm misses", "\(summary.fullWarmMissCount)")
+                counterRow(
+                    "Large writes",
+                    "\(summary.largeWriteCount)"
+                        + " · reused \(summary.reusedLargeWriteCount)"
+                        + " · no observed reuse \(summary.outstandingLargeWriteCount)"
+                        + (summary.untrackableLargeWriteCount > 0
+                            ? " · TTL unknown \(summary.untrackableLargeWriteCount)"
+                            : "")
+                )
+                if let latest = summary.latestLargeWriteTokens {
+                    counterRow(
+                        "Latest large write",
+                        summary.latestLargeWriteHasKnownTTL
+                            ? "\(tokens(latest)) · reused on \(summary.latestLargeWriteReuseTurnCount) later turn"
+                                + (summary.latestLargeWriteReuseTurnCount == 1 ? "" : "s")
+                            : "\(tokens(latest)) · TTL unknown, reuse not attributed"
+                    )
+                }
+            }
+            .font(.caption2)
+            .monospacedDigit()
+
+            let sidechain = summary.sidechain
+            if sidechain.assistantTurnCount + sidechain.missingUsageTurnCount > 0 {
+                Divider()
+                Text(
+                    "Sidechains (separate): \(sidechain.assistantTurnCount) measured turn"
+                        + (sidechain.assistantTurnCount == 1 ? "" : "s")
+                        + " · reads \(tokens(sidechain.cacheReadTokens))"
+                        + " · writes \(tokens(sidechain.cacheWriteTokens))"
+                        + (sidechain.missingUsageTurnCount > 0
+                            ? " · \(sidechain.missingUsageTurnCount) unknown usage"
+                            : "")
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(9)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primary.opacity(0.04))
+        )
+    }
+
+    private func counterRow(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label)
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var eligibleRatio: String {
+        guard let ratio = summary.mainChain.cacheEligibleRatio else { return "not available" }
+        return ratio.formatted(.percent.precision(.fractionLength(0)))
+    }
+
+    private func tokens(_ count: Int) -> String {
+        count >= 1_000 ? "\(count / 1_000)k" : "\(count)"
+    }
+
+    private var interpretation: Interpretation {
+        let main = summary.mainChain
+        guard main.assistantTurnCount >= 2 else {
+            let evidence = main.assistantTurnCount == 1
+                ? "Only one main-chain turn has complete usage; reuse requires a later measured turn."
+                : "No main-chain turn has complete usage yet; token counters remain unknown."
+            return Interpretation(
+                title: "Insufficient evidence",
+                evidence: evidence,
+                action: "No cache-efficiency action is supported by the observed data yet."
+            )
+        }
+
+        if main.missingUsageTurnCount > 0 {
+            return Interpretation(
+                title: "Incomplete usage coverage",
+                evidence: "\(main.missingUsageTurnCount) main-chain turn"
+                    + (main.missingUsageTurnCount == 1 ? " has" : "s have")
+                    + " unknown usage, so the aggregate cache-eligible ratio is not presented.",
+                action: "Use the exact counters as partial evidence; no efficiency conclusion is supported yet."
+            )
+        }
+
+        if summary.fullWarmMissCount >= 2 {
+            return Interpretation(
+                title: "Repeated warm misses",
+                evidence: "\(summary.fullWarmMissCount) turns had zero cache reads and rewrote at least 50k tokens inside the expected TTL.",
+                action: "Check whether model, effort, or MCP configuration changed around those observed rewrites."
+            )
+        }
+
+        if let latest = summary.latestLargeWriteTokens,
+           !summary.latestLargeWriteHasKnownTTL {
+            return Interpretation(
+                title: "Large-write reuse not assessed",
+                evidence: "The latest \(tokens(latest))-token write did not identify a TTL bucket, so later reads were not attributed to it.",
+                action: "Treat the total write as exact, but do not infer reuse or non-reuse from this write."
+            )
+        }
+
+        if summary.outstandingLargeWriteCount > 0,
+           summary.latestLargeWriteHasKnownTTL,
+           summary.latestLargeWriteReuseTurnCount == 0,
+           let latest = summary.latestLargeWriteTokens {
+            if let expiresAt = summary.latestLargeWriteEffectiveExpiresAt,
+               now >= expiresAt {
+                return Interpretation(
+                    title: "Large write without observed reuse",
+                    evidence: "The latest \(tokens(latest))-token write's TTL window ended without a later measured turn meeting the conservative reuse threshold.",
+                    action: "Review whether the observed write coincided with a model, effort, or MCP configuration change."
+                )
+            }
+            return Interpretation(
+                title: "Large write awaiting reuse evidence",
+                evidence: "The latest \(tokens(latest))-token write has no later measured turn meeting the conservative reuse threshold.",
+                action: "No action yet; a later turn within its TTL is needed before reuse can be assessed."
+            )
+        }
+
+        if let ratio = main.cacheEligibleRatio, ratio >= 0.8 {
+            return Interpretation(
+                title: "Strong cache reuse",
+                evidence: "\(ratio.formatted(.percent.precision(.fractionLength(0)))) of cache-eligible tokens were reads across \(main.assistantTurnCount) measured turns.",
+                action: "No change is suggested by the observed cache evidence."
+            )
+        }
+
+        if let ratio = main.cacheEligibleRatio, main.assistantTurnCount >= 3, ratio < 0.5 {
+            return Interpretation(
+                title: "Weak reuse over enough turns",
+                evidence: "Only \(ratio.formatted(.percent.precision(.fractionLength(0)))) of cache-eligible tokens were reads across \(main.assistantTurnCount) measured turns.",
+                action: "Review whether the observed writes coincide with model, effort, or MCP configuration changes."
+            )
+        }
+
+        return Interpretation(
+            title: "Mixed cache evidence",
+            evidence: "\(eligibleRatio) of cache-eligible tokens were reads across \(main.assistantTurnCount) measured turns.",
+            action: "More measured turns will make the reuse pattern clearer."
+        )
     }
 }
