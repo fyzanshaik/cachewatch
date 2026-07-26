@@ -53,4 +53,13 @@ struct SetupTests {
         let settings = try dict(result.settings)
         #expect(settings["statusLine"] != nil, "statusLine present")
     }
+
+    @Test
+    func detectsCachewatchStatuslineConfiguration() {
+        let configured = Data(#"{"statusLine":{"type":"command","command":"~/.cachewatch/cachewatch-statusline.sh"}}"#.utf8)
+        let other = Data(#"{"statusLine":{"type":"command","command":"~/bin/other-statusline.sh"}}"#.utf8)
+        #expect(StatuslineSetup.isCachewatchConfigured(in: configured))
+        #expect(StatuslineSetup.isCachewatchConfigured(in: other) == false)
+        #expect(StatuslineSetup.isCachewatchConfigured(in: Data()) == false)
+    }
 }

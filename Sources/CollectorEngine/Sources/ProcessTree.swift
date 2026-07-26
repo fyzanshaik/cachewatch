@@ -14,6 +14,11 @@ public struct ProcessSample: Sendable, Equatable {
     }
 }
 
+public struct ProcessSampleResult: Sendable, Equatable {
+    public let samples: [ProcessSample]
+    public let health: SourceHealth
+}
+
 public enum ProcessTree {
     /// Parses `ps -axo pid=,ppid=,rss=,comm=` output; rss arrives in KiB.
     /// comm is the executable path and may contain spaces — only the first
@@ -76,14 +81,63 @@ public enum ProcessTree {
 
     /// Live sample of the full process table via `ps`.
     public static func sampleAll() -> [ProcessSample] {
+        sampleReport(checkedAt: Date()).samples
+    }
+
+    public static func sampleReport(
+        checkedAt: Date,
+        executableURL: URL = URL(fileURLWithPath: "/bin/ps")
+    ) -> ProcessSampleResult {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.executableURL = executableURL
         process.arguments = ["-axo", "pid=,ppid=,rss=,comm="]
         let pipe = Pipe()
         process.standardOutput = pipe
-        guard (try? process.run()) != nil else { return [] }
+        do {
+            try process.run()
+        } catch {
+            return ProcessSampleResult(
+                samples: [],
+                health: SourceHealth(
+                    id: .process,
+                    condition: .unavailable,
+                    lastAttemptAt: checkedAt,
+                    message: "The process table command could not be started."
+                )
+            )
+        }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        return parsePS(String(decoding: data, as: UTF8.self))
+        guard process.terminationStatus == 0 else {
+            return ProcessSampleResult(
+                samples: [],
+                health: SourceHealth(
+                    id: .process,
+                    condition: .unavailable,
+                    lastAttemptAt: checkedAt,
+                    message: "The process table command failed."
+                )
+            )
+        }
+        let output = String(decoding: data, as: UTF8.self)
+        let recordsSeen = output.split(separator: "\n").count
+        let samples = parsePS(output)
+        let dropped = recordsSeen - samples.count
+        let condition: SourceCondition = dropped == 0 ? .healthy : .degraded
+        return ProcessSampleResult(
+            samples: samples,
+            health: SourceHealth(
+                id: .process,
+                condition: condition,
+                lastAttemptAt: checkedAt,
+                lastSuccessAt: condition == .healthy ? checkedAt : nil,
+                recordsSeen: recordsSeen,
+                recordsAccepted: samples.count,
+                recordsDropped: dropped,
+                message: dropped == 0
+                    ? nil
+                    : "\(dropped) process \(dropped == 1 ? "row was" : "rows were") unrecognized."
+            )
+        )
     }
 }
