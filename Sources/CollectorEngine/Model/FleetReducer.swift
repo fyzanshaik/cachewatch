@@ -63,6 +63,7 @@ public struct FleetSnapshot: Sendable, Equatable {
     /// API-priced spend across all sessions and subagents since launch replay.
     public var cumulativeTurnCostUSD = 0.0
     public var calibration = QuotaCalibrator()
+    public var sourceHealth: [SourceHealth] = []
 
     public init() {}
 }
@@ -72,6 +73,7 @@ public enum CollectorEvent: Sendable {
     case assistantTurn(AssistantTurn)
     case statusline(StatuslinePayload, receivedAt: Date)
     case memorySample(pid: Int32, residentBytes: UInt64, host: ProcessTree.Host? = nil)
+    case sourceHealth(SourceHealth)
 }
 
 /// Pure state machine: every source feeds events in, the canonical FleetSnapshot comes out.
@@ -102,6 +104,7 @@ public struct FleetReducer: Sendable {
     private var rateLimitsAsOf: Date?
     private var cumulativeTurnCostUSD = 0.0
     private var calibration: QuotaCalibrator
+    private var healthBySource: [SourceID: SourceHealth] = [:]
 
     public init(
         calibration: QuotaCalibrator = QuotaCalibrator(),
@@ -111,6 +114,17 @@ public struct FleetReducer: Sendable {
         self.calibration = calibration
         self.rateLimits = rateLimits
         self.rateLimitsAsOf = rateLimitsAsOf
+        if let rateLimitsAsOf {
+            healthBySource[.statusline] = SourceHealth(
+                id: .statusline,
+                condition: .healthy,
+                lastAttemptAt: rateLimitsAsOf,
+                lastSuccessAt: rateLimitsAsOf,
+                recordsSeen: 1,
+                recordsAccepted: 1,
+                staleAfter: 180
+            )
+        }
     }
 
     public mutating func apply(_ event: CollectorEvent) {
@@ -182,6 +196,12 @@ public struct FleetReducer: Sendable {
         case .memorySample(let pid, let residentBytes, let host):
             memoryByPid[pid] = residentBytes
             hostByPid[pid] = host
+
+        case .sourceHealth(var health):
+            if health.lastSuccessAt == nil {
+                health.lastSuccessAt = healthBySource[health.id]?.lastSuccessAt
+            }
+            healthBySource[health.id] = health
         }
     }
 
@@ -204,6 +224,7 @@ public struct FleetReducer: Sendable {
         fleet.rateLimitsAsOf = rateLimitsAsOf
         fleet.cumulativeTurnCostUSD = cumulativeTurnCostUSD
         fleet.calibration = calibration
+        fleet.sourceHealth = SourceID.allCases.compactMap { healthBySource[$0] }
         fleet.sessions = registry.map { entry in
             let e = enrichments[entry.sessionId]
             var s = SessionSnapshot(

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import CollectorEngine
 
@@ -8,6 +9,9 @@ struct FleetView: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 8) {
                 header(now: context.date)
+                if hasSourceNotice(at: context.date) {
+                    SourceHealthPanel(fleet: model.fleet, now: context.date)
+                }
                 Divider()
                 if model.isLoading {
                     HStack(spacing: 8) {
@@ -62,6 +66,10 @@ struct FleetView: View {
         }
     }
 
+    private func hasSourceNotice(at now: Date) -> Bool {
+        model.fleet.sourceHealth.contains { $0.condition(at: now) != .healthy }
+    }
+
     private var memorySummary: some View {
         let sessions = model.fleet.sessions.compactMap(\.memoryBytes).reduce(0, +)
         let total = SystemMemory.totalBytes
@@ -96,14 +104,25 @@ struct FleetView: View {
                 Text("\(model.fleet.sessions.count) session\(model.fleet.sessions.count == 1 ? "" : "s")")
                     .font(.headline)
                 Spacer()
-                if model.fleet.rateLimits == nil {
-                    Text("quota: waiting for statusline data")
+                if model.fleet.health(for: .statusline)?.condition(at: now) == .notConfigured {
+                    Text("quota: statusline not configured")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                } else if let asOf = model.fleet.rateLimitsAsOf, now.timeIntervalSince(asOf) > 120 {
+                } else if model.fleet.health(for: .statusline)?.condition(at: now) == .unavailable {
+                    Text("quota unavailable")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else if model.fleet.rateLimits == nil {
+                    Text(model.fleet.health(for: .statusline)?.condition(at: now) == .stale
+                         ? "quota: no recent statusline data"
+                         : "quota: waiting for statusline data")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                } else if model.fleet.health(for: .statusline)?.condition(at: now) == .stale,
+                          let asOf = model.fleet.rateLimitsAsOf {
                     Text("quota as of \(Format.age(since: asOf, now: now)) ago")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.orange)
                 } else if model.fleet.calibration.dollarsPerPercent == nil {
                     Text("learning quota \(Int(model.fleet.calibration.progress * 100))%")
                         .font(.caption2)
@@ -119,6 +138,108 @@ struct FleetView: View {
                 }
             }
         }
+    }
+}
+
+private struct SourceHealthPanel: View {
+    let fleet: FleetSnapshot
+    let now: Date
+    @State private var isExpanded = false
+
+    private var sources: [SourceHealth] {
+        SourceID.allCases.compactMap { fleet.health(for: $0) }
+    }
+
+    private var hasWarning: Bool {
+        sources.contains { $0.isWarning(at: now) }
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(sources) { health in
+                    sourceRow(health)
+                }
+                Button("Copy diagnostics") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(
+                        fleet.diagnosticSummary(at: now),
+                        forType: .string
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Copies aggregate source health only; no prompts, paths, or session names")
+            }
+            .padding(.top, 7)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: hasWarning ? "exclamationmark.triangle.fill" : "info.circle")
+                    .foregroundStyle(hasWarning ? .orange : .secondary)
+                Text(hasWarning ? "Data sources · Some data may be incomplete" : "Data sources · Setup")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Spacer()
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(hasWarning ? Color.orange.opacity(0.10) : Color.secondary.opacity(0.08))
+        )
+    }
+
+    private func sourceRow(_ health: SourceHealth) -> some View {
+        let condition = health.condition(at: now)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(health.id.displayName)
+                    .fontWeight(.medium)
+                Spacer()
+                Text(condition.displayName)
+                    .foregroundStyle(
+                        condition == .healthy
+                            ? Color.green
+                            : condition == .notConfigured ? Color.secondary : Color.orange
+                    )
+            }
+            .font(.caption)
+            Text(coverage(health))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            if condition == .stale, let success = health.lastSuccessAt ?? health.lastAttemptAt {
+                Text("No new data for \(Format.age(since: success, now: now)).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else if let message = health.message {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if condition != .healthy {
+                Text(health.id.affectedMetrics)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(health.id.suggestedAction)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func coverage(_ health: SourceHealth) -> String {
+        var parts = [
+            "\(health.recordsSeen) seen",
+            "\(health.recordsAccepted) accepted",
+        ]
+        if health.recordsDropped > 0 {
+            parts.append("\(health.recordsDropped) dropped")
+        }
+        if let attempt = health.lastAttemptAt {
+            parts.append("checked \(Format.age(since: attempt, now: now)) ago")
+        }
+        return parts.joined(separator: " · ")
     }
 }
 

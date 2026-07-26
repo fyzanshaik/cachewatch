@@ -63,6 +63,12 @@ public struct AssistantTurn: Sendable, Equatable {
     }
 }
 
+public enum TranscriptLineResult: Sendable, Equatable {
+    case assistantTurn(AssistantTurn)
+    case ignored
+    case rejected
+}
+
 public enum TranscriptParser {
     /// Parses transcript JSONL bytes, skipping non-JSON and non-assistant lines.
     public static func assistantTurns(from data: Data) -> [AssistantTurn] {
@@ -73,21 +79,28 @@ public enum TranscriptParser {
 
     /// Parses a single transcript line; nil for anything that isn't a well-formed assistant turn.
     public static func assistantTurn(fromLine line: String) -> AssistantTurn? {
-        guard let data = line.data(using: .utf8),
-              let entry = try? decoder.decode(TranscriptLine.self, from: data),
-              entry.type == "assistant",
-              let sessionId = entry.sessionId,
-              let timestamp = entry.timestamp
-        else { return nil }
+        guard case .assistantTurn(let turn) = classify(line: line) else { return nil }
+        return turn
+    }
 
-        return AssistantTurn(
+    /// Distinguishes normal non-assistant transcript records from malformed data.
+    /// The result contains no raw line content.
+    public static func classify(line: String) -> TranscriptLineResult {
+        guard let data = line.data(using: .utf8),
+              let entry = try? decoder.decode(TranscriptLine.self, from: data)
+        else { return .rejected }
+        guard entry.type == "assistant" else { return .ignored }
+        guard let sessionId = entry.sessionId, let timestamp = entry.timestamp else {
+            return .rejected
+        }
+        return .assistantTurn(AssistantTurn(
             sessionId: sessionId,
             timestamp: timestamp,
             model: entry.message?.model,
             gitBranch: entry.gitBranch,
             isSidechain: entry.isSidechain ?? false,
             usage: entry.message?.usage.map(TurnUsage.init)
-        )
+        ))
     }
 
     private static let decoder: JSONDecoder = {

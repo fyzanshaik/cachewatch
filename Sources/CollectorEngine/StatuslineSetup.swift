@@ -43,6 +43,16 @@ public enum StatuslineSetup {
         return Result(settings: try serialize(root), changed: true, chainedPrevious: chained)
     }
 
+    /// Detects the forwarder without retaining or reporting the user's command.
+    public static func isCachewatchConfigured(in settingsJSON: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: settingsJSON) as? [String: Any],
+              let statusLine = root["statusLine"] as? [String: Any],
+              statusLine["type"] as? String == "command",
+              let command = statusLine["command"] as? String
+        else { return false }
+        return command.contains("cachewatch-statusline.sh")
+    }
+
     private static func serialize(_ root: [String: Any]) throws -> Data {
         try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
     }
