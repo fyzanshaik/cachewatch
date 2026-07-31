@@ -50,23 +50,24 @@ func printDump() {
     let fleet = Collector.dump()
     if fleet.sessions.isEmpty {
         print("No live Claude Code sessions.")
-        return
+    } else {
+        let header = ["SESSION", "STATUS", "MODEL", "CONTEXT", "CACHE", "MEMORY", "LAST TURN"]
+        var rows = [header]
+        for s in fleet.sessions {
+            rows.append([
+                s.name ?? String(s.sessionId.prefix(8)),
+                s.status.rawValue,
+                Format.model(s.model),
+                Format.tokens(s.contextTokens),
+                Format.cacheState(s),
+                Format.memory(s.memoryBytes),
+                s.lastTurnAt.map { Format.age(since: $0) + " ago" } ?? "—",
+            ])
+        }
+        let widths = (0..<header.count).map { col in rows.map { $0[col].count }.max()! }
+        for row in rows {
+            print(zip(row, widths).map { $0.padding(toLength: $1 + 2, withPad: " ", startingAt: 0) }.joined())
+        }
     }
-    let header = ["SESSION", "STATUS", "MODEL", "CONTEXT", "CACHE", "MEMORY", "LAST TURN"]
-    var rows = [header]
-    for s in fleet.sessions {
-        rows.append([
-            s.name ?? String(s.sessionId.prefix(8)),
-            s.status.rawValue,
-            Format.model(s.model),
-            Format.tokens(s.contextTokens),
-            Format.cacheState(s),
-            Format.memory(s.memoryBytes),
-            s.lastTurnAt.map { Format.age(since: $0) + " ago" } ?? "—",
-        ])
-    }
-    let widths = (0..<header.count).map { col in rows.map { $0[col].count }.max()! }
-    for row in rows {
-        print(zip(row, widths).map { $0.padding(toLength: $1 + 2, withPad: " ", startingAt: 0) }.joined())
-    }
+    print("\n\(fleet.diagnosticsSummary(at: Date()))")
 }

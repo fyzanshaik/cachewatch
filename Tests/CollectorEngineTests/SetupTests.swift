@@ -66,4 +66,30 @@ struct SetupTests {
 
         #expect(embeddedBytes == canonicalBytes)
     }
+
+    @Test
+    func detectsWhetherStatuslineForwarderIsConfigured() throws {
+        let configured = try StatuslineSetup.apply(to: Data(), scriptPath: script)
+        #expect(StatuslineSetup.isForwarderConfigured(in: configured.settings))
+        #expect(StatuslineSetup.isForwarderConfigured(
+            in: Data(#"{"statusLine":{"type":"command","command":"~/bin/other.sh"}}"#.utf8)
+        ) == false)
+        #expect(StatuslineSetup.isForwarderConfigured(in: Data("malformed".utf8)) == false)
+    }
+
+    @Test
+    func classifiesMalformedStatuslineSettingsAsUnreadable() {
+        #expect(StatuslineSetup.configurationState(in: Data()) == .notConfigured)
+        #expect(StatuslineSetup.configurationState(in: Data("malformed".utf8)) == .unreadable)
+    }
+
+    @Test
+    func rejectsMatchingForwarderWithNonCommandStatuslineType() {
+        let invalid = Data("""
+        {"statusLine":{"type":"url","command":"/bin/sh ~/.cachewatch/cachewatch-statusline.sh"}}
+        """.utf8)
+
+        #expect(StatuslineSetup.configurationState(in: invalid) == .notConfigured)
+        #expect(StatuslineSetup.isForwarderConfigured(in: invalid) == false)
+    }
 }

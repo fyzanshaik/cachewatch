@@ -60,6 +60,7 @@ public struct FleetSnapshot: Sendable, Equatable {
     public var sessions: [SessionSnapshot] = []
     public var rateLimits: StatuslinePayload.RateLimits?
     public var rateLimitsAsOf: Date?
+    public var sourceHealth: [SourceHealth] = []
     /// API-priced spend across all sessions and subagents since launch replay.
     public var cumulativeTurnCostUSD = 0.0
     public var calibration = QuotaCalibrator()
@@ -72,6 +73,7 @@ public enum CollectorEvent: Sendable {
     case assistantTurn(AssistantTurn)
     case statusline(StatuslinePayload, receivedAt: Date)
     case memorySample(pid: Int32, residentBytes: UInt64, host: ProcessTree.Host? = nil)
+    case sourceHealth(SourceHealth)
 }
 
 /// Pure state machine: every source feeds events in, the canonical FleetSnapshot comes out.
@@ -98,6 +100,7 @@ public struct FleetReducer: Sendable {
     private var enrichments: [String: Enrichment] = [:]
     private var memoryByPid: [Int32: UInt64] = [:]
     private var hostByPid: [Int32: ProcessTree.Host?] = [:]
+    private var sourceHealthByID: [SourceID: SourceHealth] = [:]
     private var rateLimits: StatuslinePayload.RateLimits?
     private var rateLimitsAsOf: Date?
     private var cumulativeTurnCostUSD = 0.0
@@ -182,6 +185,13 @@ public struct FleetReducer: Sendable {
         case .memorySample(let pid, let residentBytes, let host):
             memoryByPid[pid] = residentBytes
             hostByPid[pid] = host
+
+        case .sourceHealth(let health):
+            var merged = health
+            if merged.lastSuccessAt == nil {
+                merged.lastSuccessAt = sourceHealthByID[health.id]?.lastSuccessAt
+            }
+            sourceHealthByID[health.id] = merged
         }
     }
 
@@ -202,6 +212,7 @@ public struct FleetReducer: Sendable {
         var fleet = FleetSnapshot()
         fleet.rateLimits = rateLimits
         fleet.rateLimitsAsOf = rateLimitsAsOf
+        fleet.sourceHealth = SourceID.allCases.compactMap { sourceHealthByID[$0] }
         fleet.cumulativeTurnCostUSD = cumulativeTurnCostUSD
         fleet.calibration = calibration
         fleet.sessions = registry.map { entry in

@@ -63,6 +63,12 @@ public struct AssistantTurn: Sendable, Equatable {
     }
 }
 
+public enum TranscriptLineClassification: Sendable, Equatable {
+    case assistant(AssistantTurn)
+    case ignored
+    case rejected
+}
+
 public enum TranscriptParser {
     /// Parses transcript JSONL bytes, skipping non-JSON and non-assistant lines.
     public static func assistantTurns(from data: Data) -> [AssistantTurn] {
@@ -73,21 +79,28 @@ public enum TranscriptParser {
 
     /// Parses a single transcript line; nil for anything that isn't a well-formed assistant turn.
     public static func assistantTurn(fromLine line: String) -> AssistantTurn? {
+        guard case .assistant(let turn) = classify(line: line) else { return nil }
+        return turn
+    }
+
+    public static func classify(line: String) -> TranscriptLineClassification {
         guard let data = line.data(using: .utf8),
-              let entry = try? decoder.decode(TranscriptLine.self, from: data),
-              entry.type == "assistant",
+              let entry = try? decoder.decode(TranscriptLine.self, from: data)
+        else { return .rejected }
+        guard entry.type == "assistant" else { return .ignored }
+        guard
               let sessionId = entry.sessionId,
               let timestamp = entry.timestamp
-        else { return nil }
+        else { return .rejected }
 
-        return AssistantTurn(
+        return .assistant(AssistantTurn(
             sessionId: sessionId,
             timestamp: timestamp,
             model: entry.message?.model,
             gitBranch: entry.gitBranch,
             isSidechain: entry.isSidechain ?? false,
             usage: entry.message?.usage.map(TurnUsage.init)
-        )
+        ))
     }
 
     private static let decoder: JSONDecoder = {

@@ -40,6 +40,16 @@ struct ParsingTests {
     }
 
     @Test
+    func classifiesIgnoredAndRejectedTranscriptRecords() {
+        let user = #"{"type":"user","sessionId":"abc","timestamp":"2026-07-19T10:00:00Z"}"#
+        let brokenAssistant = #"{"type":"assistant","sessionId":"abc"}"#
+
+        #expect(TranscriptParser.classify(line: user) == .ignored)
+        #expect(TranscriptParser.classify(line: "not-json") == .rejected)
+        #expect(TranscriptParser.classify(line: brokenAssistant) == .rejected)
+    }
+
+    @Test
     func readsUsageAndTTLBuckets() throws {
         let turns = TranscriptParser.assistantTurns(from: try fixture("transcript-sample.jsonl"))
         let first = turns[0]
