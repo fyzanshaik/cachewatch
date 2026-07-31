@@ -18,6 +18,7 @@
 		B10000000000000000000009 /* SystemMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* SystemMemory.swift */; };
 		B1000000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* Assets.xcassets */; };
 		B1000000000000000000000B /* CollectorEngine in Frameworks */ = {isa = PBXBuildFile; productRef = E10000000000000000000002 /* CollectorEngine */; };
+		B1000000000000000000000C /* AlertSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* AlertSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 		A10000000000000000000009 /* SystemMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemMemory.swift; sourceTree = "<group>"; };
 		A1000000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Cachewatch/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		A1000000000000000000000B /* Cachewatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cachewatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000000000000000000000C /* AlertSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,6 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000001 /* AlertCenter.swift */,
+				A1000000000000000000000C /* AlertSettingsView.swift */,
 				A10000000000000000000002 /* CachewatchApp.swift */,
 				A10000000000000000000003 /* FleetView.swift */,
 				A10000000000000000000004 /* Formatting.swift */,
@@ -157,6 +160,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B10000000000000000000001 /* AlertCenter.swift in Sources */,
+				B1000000000000000000000C /* AlertSettingsView.swift in Sources */,
 				B10000000000000000000002 /* CachewatchApp.swift in Sources */,
 				B10000000000000000000003 /* FleetView.swift in Sources */,
 				B10000000000000000000004 /* Formatting.swift in Sources */,

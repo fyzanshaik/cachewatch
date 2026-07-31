@@ -129,6 +129,35 @@ struct AlertTests {
     }
 
     @Test
+    func completeAlertConfigurationPersistsThroughStateStore() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "cachewatch-alert-settings-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = StateStore(fileURL: directory.appending(path: "state.json"))
+        var state = AppState()
+        state.alerts.notificationsEnabled = false
+        state.alerts.quota.enabled = false
+        state.alerts.quota.thresholdPercentage = 65
+        state.alerts.cacheExpiry.enabled = false
+        state.alerts.cacheExpiry.warningSeconds = 150
+        state.alerts.cacheExpiry.minContextTokens = 120_000
+        state.alerts.longIdle.enabled = false
+        state.alerts.longIdle.idleHours = 9.5
+        state.alerts.longIdle.minContextTokens = 240_000
+        state.alerts.longIdle.minMemoryBytes = 1_200_000_000
+        state.alerts.cacheMiss.enabled = false
+        state.alerts.needsInput.enabled = false
+        state.alerts.needsInput.afterSeconds = 240
+        state.alerts.turnFinished.enabled = false
+        state.alerts.turnFinished.minBusySeconds = 900
+
+        store.save(state)
+        let restored = store.load()
+
+        #expect(restored.alerts == state.alerts)
+    }
+
+    @Test
     func launchAtLoginPersistsAndDefaultsOff() throws {
         var state = AppState()
         #expect(state.launchAtLogin == false, "default")
