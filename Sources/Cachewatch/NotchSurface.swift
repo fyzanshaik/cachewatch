@@ -21,13 +21,24 @@ final class NotchSurfaceState {
 }
 
 @MainActor
-final class NotchSurface {
+final class NotchSurface: NSObject {
     private let state = NotchSurfaceState()
     private var panel: NSPanel?
-    private var queue: [CollectorEngine.Alert] = []
+    private var presentationQueue = AlertPresentationQueue()
+    private var presentationDisplay = AlertPresentationDisplay()
+    private var dismissalTask: Task<Void, Never>?
     private weak var model: FleetModel?
+    var onPresentationUnavailable: (([CollectorEngine.Alert]) -> Void)?
 
-    var canShow: Bool { notchScreen != nil }
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersDidChange),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+    }
 
     /// Hover-to-expand availability; alerts show regardless. Persisted in AppState.
     var hudEnabled = false {
@@ -36,7 +47,22 @@ final class NotchSurface {
 
     private func applyVisibility() {
         guard let panel else { return }
-        let ambientVisible = hudEnabled || state.mode != .collapsed
+        let ambientVisible = AlertSurfaceVisibility.shouldOrderFront(
+            hasNotchedScreen: anyNotchScreen != nil,
+            hudEnabled: hudEnabled,
+            hasTransientContent: state.mode != .collapsed
+        )
+        // Alerts are informational and have no controls. Let clicks pass through
+        // even while the banner is animating over another app.
+        let isInformationalAlert: Bool
+        if case .alert = state.mode {
+            isInformationalAlert = true
+        } else {
+            isInformationalAlert = false
+        }
+        panel.ignoresMouseEvents = AlertSurfaceInteraction.shouldIgnoreMouseEvents(
+            isInformationalAlert: isInformationalAlert
+        )
         if ambientVisible {
             panel.orderFrontRegardless()
         } else {
@@ -44,42 +70,152 @@ final class NotchSurface {
         }
     }
 
-    private var notchScreen: NSScreen? {
+    private var anyNotchScreen: NSScreen? {
         NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
+    }
+
+    private func displayID(_ screen: NSScreen) -> Int? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue
+    }
+
+    private var connectedDisplays: [AlertDisplay] {
+        NSScreen.screens.compactMap { screen in
+            guard let id = displayID(screen) else { return nil }
+            return AlertDisplay(id: id, hasNotch: screen.safeAreaInsets.top > 0)
+        }
+    }
+
+    private func screen(withID id: Int) -> NSScreen? {
+        NSScreen.screens.first { displayID($0) == id }
+    }
+
+    private var interactionScreen: NSScreen? {
+        let pointer = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) }
+    }
+
+    /// Custom alerts belong only on the display containing the pointer. Unlike
+    /// NSScreen.main, this remains meaningful for a background menu-bar app.
+    /// If the active display has no notch, native macOS notifications are used.
+    private var activeNotchScreen: NSScreen? {
+        guard let screen = interactionScreen,
+              AlertDisplayPolicy.customSurfaceTarget(
+                activeDisplayID: displayID(screen), connectedDisplays: connectedDisplays
+              ) != nil
+        else { return nil }
+        return screen
+    }
+
+    private var presentationScreen: NSScreen? {
+        guard let target = presentationDisplay.connectedTarget(in: connectedDisplays) else { return nil }
+        return screen(withID: target.id)
     }
 
     func attach(model: FleetModel) {
         self.model = model
-        guard canShow, panel == nil else { return }
+        reconcilePanel()
+    }
+
+    @discardableResult
+    private func ensurePanel() -> Bool {
+        guard panel == nil else { return true }
+        guard let model, anyNotchScreen != nil else { return false }
         let panel = makePanel()
         panel.contentView = NSHostingView(rootView: NotchRoot(
             state: state,
             model: model,
-            onHoverChange: { [weak self] inside in self?.hoverChanged(inside) },
-            onAlertDone: { [weak self] in self?.alertFinished() }
+            onHoverChange: { [weak self] inside in self?.hoverChanged(inside) }
         ))
         self.panel = panel
         applyFrame()
         applyVisibility()
+        return true
     }
 
-    func show(_ alert: CollectorEngine.Alert) {
-        guard canShow else { return }
-        if case .alert = state.mode {
-            queue.append(alert)
-        } else {
-            state.mode = .alert(alert)
-            applyFrame()
-            applyVisibility()
+    /// Returns true only after a real panel on the active notched screen accepts
+    /// the alert. Callers must fall back to native delivery when this is false.
+    func show(_ alert: CollectorEngine.Alert) -> Bool {
+        guard let screen = activeNotchScreen,
+              let screenID = displayID(screen),
+              ensurePanel()
+        else { return false }
+        if let first = presentationQueue.enqueue(alert) {
+            presentationDisplay.accept(displayID: screenID)
+            present(first)
         }
+        return true
     }
 
     private func alertFinished() {
-        if !queue.isEmpty {
-            state.mode = .alert(queue.removeFirst())
-        } else {
+        guard let next = presentationQueue.advance() else {
+            collapse()
+            return
+        }
+        guard presentationScreen != nil else {
+            fallBackToSystemNotifications()
+            return
+        }
+        present(next)
+    }
+
+    private func present(_ alert: CollectorEngine.Alert) {
+        dismissalTask?.cancel()
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+            state.mode = .alert(alert)
+        }
+        applyFrame()
+        applyVisibility()
+        dismissalTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.alertFinished()
+        }
+    }
+
+    private func collapse() {
+        dismissalTask?.cancel()
+        dismissalTask = nil
+        withAnimation(.easeIn(duration: 0.35)) {
             state.mode = .collapsed
         }
+        presentationDisplay.clear()
+        applyFrame()
+        applyVisibility()
+    }
+
+    private func fallBackToSystemNotifications() {
+        dismissalTask?.cancel()
+        dismissalTask = nil
+        let alerts = presentationQueue.drain()
+        state.mode = .collapsed
+        presentationDisplay.clear()
+        applyFrame()
+        applyVisibility()
+        if !alerts.isEmpty {
+            onPresentationUnavailable?(alerts)
+        }
+    }
+
+    @objc private func screenParametersDidChange() {
+        if presentationQueue.current != nil, presentationScreen == nil {
+            fallBackToSystemNotifications()
+        } else {
+            reconcilePanel()
+        }
+    }
+
+    private func reconcilePanel() {
+        guard anyNotchScreen != nil else {
+            if AlertSurfaceVisibility.shouldCollapseTransientState(
+                hasNotchedScreen: false,
+                isExpanded: state.mode == .expanded
+            ) {
+                state.mode = .collapsed
+            }
+            panel?.orderOut(nil)
+            return
+        }
+        guard ensurePanel() else { return }
         applyFrame()
         applyVisibility()
     }
@@ -93,7 +229,12 @@ final class NotchSurface {
     }
 
     private func applyFrame() {
-        guard let panel, let screen = notchScreen else { return }
+        let screen: NSScreen? = if case .alert = state.mode {
+            presentationScreen
+        } else {
+            anyNotchScreen
+        }
+        guard let panel, let screen else { return }
         let notch = notchGeometry(of: screen)
         // Collapsed is an INVISIBLE hover target exactly matching the notch dead
         // zone — the physical cutout has no pixels and takes no clicks, so a
@@ -141,7 +282,6 @@ private struct NotchRoot: View {
     let state: NotchSurfaceState
     let model: FleetModel
     let onHoverChange: (Bool) -> Void
-    let onAlertDone: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -151,7 +291,9 @@ private struct NotchRoot: View {
                 Color.black.opacity(0.001)
                     .contentShape(Rectangle())
             case .alert(let alert):
-                AlertCard(alert: alert, dismiss: onAlertDone)
+                AlertCard(alert: alert)
+                    .id(alert.key)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             case .expanded:
                 FleetView(model: model)
                     .background(
@@ -168,8 +310,6 @@ private struct NotchRoot: View {
 /// The notification takeover, mascot and all.
 private struct AlertCard: View {
     let alert: CollectorEngine.Alert
-    let dismiss: () -> Void
-    @State private var revealed = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -195,20 +335,5 @@ private struct AlertCard: View {
             UnevenRoundedRectangle(bottomLeadingRadius: 22, bottomTrailingRadius: 22)
                 .fill(.black)
         )
-        .offset(y: revealed ? 0 : -140)
-        .opacity(revealed ? 1 : 0)
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
-                revealed = true
-            }
-            Task {
-                try? await Task.sleep(for: .seconds(5))
-                withAnimation(.easeIn(duration: 0.35)) {
-                    revealed = false
-                }
-                try? await Task.sleep(for: .seconds(0.4))
-                dismiss()
-            }
-        }
     }
 }

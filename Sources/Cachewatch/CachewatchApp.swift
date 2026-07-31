@@ -91,6 +91,11 @@ final class FleetModel {
             guard let self else { return }
             self.notchSurface.attach(model: self)
             self.alertCenter.notch = self.notchSurface
+            self.notchSurface.onPresentationUnavailable = { [weak alertCenter = self.alertCenter] alerts in
+                for alert in alerts {
+                    alertCenter?.deliverWithoutCustomSurface(alert)
+                }
+            }
             self.notchSurface.hudEnabled = self.alertCenter.notchHUDEnabled
         }
     }
