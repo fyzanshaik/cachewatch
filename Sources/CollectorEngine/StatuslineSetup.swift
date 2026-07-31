@@ -4,6 +4,12 @@ import Foundation
 /// Code settings.json without disturbing anything else. An existing statusline
 /// is chained via CACHEWATCH_NEXT_STATUSLINE, never clobbered.
 public enum StatuslineSetup {
+    public enum ConfigurationState: Sendable, Equatable {
+        case configured
+        case notConfigured
+        case unreadable
+    }
+
     /// Embedded so `cachewatch setup` remains self-contained in the standalone
     /// CLI binary. `SetupTests` enforces byte parity with the repository script.
     public static let forwarderScript = #"""
@@ -44,6 +50,22 @@ fi
         public let settings: Data
         public let changed: Bool
         public let chainedPrevious: String?
+    }
+
+    public static func isForwarderConfigured(in settingsJSON: Data) -> Bool {
+        configurationState(in: settingsJSON) == .configured
+    }
+
+    public static func configurationState(in settingsJSON: Data) -> ConfigurationState {
+        guard !settingsJSON.isEmpty else { return .notConfigured }
+        guard let root = try? JSONSerialization.jsonObject(with: settingsJSON) as? [String: Any] else {
+            return .unreadable
+        }
+        guard let statusLine = root["statusLine"] as? [String: Any],
+              statusLine["type"] as? String == "command",
+              let command = statusLine["command"] as? String
+        else { return .notConfigured }
+        return command.contains("cachewatch-statusline.sh") ? .configured : .notConfigured
     }
 
     public static func apply(to settingsJSON: Data, scriptPath: String) throws -> Result {

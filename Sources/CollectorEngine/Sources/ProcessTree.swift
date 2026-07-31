@@ -14,6 +14,32 @@ public struct ProcessSample: Sendable, Equatable {
     }
 }
 
+public struct ProcessSampleResult: Sendable {
+    public let samples: [ProcessSample]
+    public let health: SourceHealth
+
+    public func sessionSamples(for sessionPIDs: [String: Int32]) -> [SessionProcessSample] {
+        guard health.condition != .unavailable else { return [] }
+        let availablePIDs = Set(samples.map(\.pid))
+        return sessionPIDs.keys.sorted().compactMap { sessionID in
+            guard let pid = sessionPIDs[sessionID], availablePIDs.contains(pid) else { return nil }
+            return SessionProcessSample(
+                sessionID: sessionID,
+                pid: pid,
+                residentBytes: ProcessTree.subtreeRSS(of: pid, in: samples),
+                host: ProcessTree.hostApp(of: pid, in: samples)
+            )
+        }
+    }
+}
+
+public struct SessionProcessSample: Sendable, Equatable {
+    public let sessionID: String
+    public let pid: Int32
+    public let residentBytes: UInt64
+    public let host: ProcessTree.Host?
+}
+
 public enum ProcessTree {
     /// Parses `ps -axo pid=,ppid=,rss=,comm=` output; rss arrives in KiB.
     /// comm is the executable path and may contain spaces — only the first
@@ -76,14 +102,62 @@ public enum ProcessTree {
 
     /// Live sample of the full process table via `ps`.
     public static func sampleAll() -> [ProcessSample] {
+        sampleAllReport().samples
+    }
+
+    public static func sampleAllReport(at attemptedAt: Date = Date()) -> ProcessSampleResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
         process.arguments = ["-axo", "pid=,ppid=,rss=,comm="]
         let pipe = Pipe()
         process.standardOutput = pipe
-        guard (try? process.run()) != nil else { return [] }
+        guard (try? process.run()) != nil else {
+            return report(psOutput: "", terminationStatus: 127, at: attemptedAt)
+        }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        return parsePS(String(decoding: data, as: UTF8.self))
+        return report(
+            psOutput: String(decoding: data, as: UTF8.self),
+            terminationStatus: process.terminationStatus,
+            at: attemptedAt
+        )
+    }
+
+    public static func report(
+        psOutput: String,
+        terminationStatus: Int32,
+        at attemptedAt: Date
+    ) -> ProcessSampleResult {
+        guard terminationStatus == 0 else {
+            return ProcessSampleResult(
+                samples: [],
+                health: SourceHealth(
+                    id: .process,
+                    condition: .unavailable,
+                    lastAttemptAt: attemptedAt,
+                    message: "Process sampling failed. Only memory and host-app data are affected."
+                )
+            )
+        }
+
+        let recordsSeen = psOutput.split(separator: "\n", omittingEmptySubsequences: true).count
+        let samples = parsePS(psOutput)
+        let dropped = recordsSeen - samples.count
+        let degraded = dropped > 0 || samples.isEmpty
+        return ProcessSampleResult(
+            samples: samples,
+            health: SourceHealth(
+                id: .process,
+                condition: degraded ? .degraded : .healthy,
+                lastAttemptAt: attemptedAt,
+                lastSuccessAt: attemptedAt,
+                recordsSeen: recordsSeen,
+                recordsAccepted: samples.count,
+                recordsDropped: dropped,
+                message: degraded
+                    ? "Some process records were unavailable. Only memory and host-app data may be incomplete."
+                    : nil
+            )
+        )
     }
 }

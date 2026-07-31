@@ -3,11 +3,15 @@ import CollectorEngine
 
 struct FleetView: View {
     let model: FleetModel
+    @State private var showingSourceHealth = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 8) {
                 header(now: context.date)
+                if !model.fleet.warningSources(at: context.date).isEmpty {
+                    sourceWarning(now: context.date)
+                }
                 Divider()
                 if model.isLoading {
                     HStack(spacing: 8) {
@@ -28,9 +32,14 @@ struct FleetView: View {
                         SessionRow(session: session, now: context.date, fleet: model.fleet)
                     }
                 }
+                SourceHealthInspector(
+                    fleet: model.fleet,
+                    now: context.date,
+                    isExpanded: $showingSourceHealth
+                )
                 Divider()
                 HStack {
-                    memorySummary
+                    memorySummary(now: context.date)
                     Spacer()
                     Button(model.alertCenter.notchHUDEnabled ? "Notch: on" : "Notch: off") {
                         model.alertCenter.notchHUDEnabled.toggle()
@@ -62,13 +71,14 @@ struct FleetView: View {
         }
     }
 
-    private var memorySummary: some View {
+    private func memorySummary(now: Date) -> some View {
         let sessions = model.fleet.sessions.compactMap(\.memoryBytes).reduce(0, +)
         let total = SystemMemory.totalBytes
         let systemUsed = SystemMemory.usedBytes()
         let pressure = systemUsed.map { Double($0) / Double(total) } ?? 0
+        let qualifier = model.fleet.metricQualifier(for: .process, at: now)
         return Text(
-            "sessions \(Format.memory(sessions))"
+            "\(qualifier == nil ? "" : "~")sessions \(Format.memory(sessions))"
             + (systemUsed.map { " · mac \(Format.memory($0)) / \(Format.memory(total))" } ?? "")
         )
         .font(.caption)
@@ -76,7 +86,30 @@ struct FleetView: View {
         .fixedSize()
         .foregroundStyle(pressure > 0.85 ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
         .monospacedDigit()
-        .help("Session process trees vs total machine memory in use (active + wired + compressed)")
+        .help(
+            qualifier.map { "Session process-tree memory is \($0); machine memory is live." }
+                ?? "Session process trees vs total machine memory in use (active + wired + compressed)"
+        )
+    }
+
+    private func sourceWarning(now: Date) -> some View {
+        let warnings = model.fleet.warningSources(at: now)
+        return Button {
+            showingSourceHealth = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Data incomplete · \(warnings.map { $0.id.displayName }.joined(separator: ", "))")
+                    .lineLimit(1)
+                Spacer()
+                Text("Details")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+        }
+        .buttonStyle(.plain)
+        .help("One or more collectors are stale, degraded, or unavailable")
     }
 
     /// Sessions needing input first, then by recency of activity.
@@ -91,15 +124,21 @@ struct FleetView: View {
 
     @ViewBuilder
     private func header(now: Date) -> some View {
+        let quotaQualifier = model.fleet.metricQualifier(for: .statusline, at: now)
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(model.fleet.sessions.count) session\(model.fleet.sessions.count == 1 ? "" : "s")")
                     .font(.headline)
                 Spacer()
                 if model.fleet.rateLimits == nil {
-                    Text("quota: waiting for statusline data")
+                    Text(quotaQualifier.map { "quota: \($0)" } ?? "quota: waiting for statusline data")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+                        .help(model.fleet.sourceHealth(for: .statusline)?.message ?? "Waiting for statusline data")
+                } else if let quotaQualifier {
+                    Text("quota: \(quotaQualifier)")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
                 } else if let asOf = model.fleet.rateLimitsAsOf, now.timeIntervalSince(asOf) > 120 {
                     Text("quota as of \(Format.age(since: asOf, now: now)) ago")
                         .font(.caption2)
@@ -118,6 +157,82 @@ struct FleetView: View {
                     Spacer()
                 }
             }
+        }
+    }
+}
+
+private struct SourceHealthInspector: View {
+    let fleet: FleetSnapshot
+    let now: Date
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(fleet.sourceHealth) { health in
+                    let condition = health.currentCondition(at: now)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(color(for: condition))
+                                .frame(width: 7, height: 7)
+                            Text(health.id.displayName)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text(condition.rawValue)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(health.id.affectedMetrics)
+                            .foregroundStyle(.tertiary)
+                        Text("seen \(health.recordsSeen) · accepted \(health.recordsAccepted) · dropped \(health.recordsDropped)")
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                        if let attempt = health.lastAttemptAt {
+                            Text(
+                                "attempt \(Format.age(since: attempt, now: now)) ago"
+                                + (health.lastSuccessAt.map { " · success \(Format.age(since: $0, now: now)) ago" } ?? "")
+                            )
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                        }
+                        if let message = health.message {
+                            Text(message)
+                                .foregroundStyle(condition == .unavailable ? .red : .secondary)
+                        }
+                    }
+                    .font(.caption2)
+                }
+                Button("Copy diagnostics") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(
+                        fleet.diagnosticsSummary(at: now),
+                        forType: .string
+                    )
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .help("Copies source states, ages, and counters only; no prompts, paths, or transcript content")
+            }
+            .padding(.top, 5)
+        } label: {
+            HStack {
+                Text("Data sources")
+                Spacer()
+                if !fleet.warningSources(at: now).isEmpty {
+                    Text("needs attention")
+                        .foregroundStyle(.orange)
+                }
+            }
+            .font(.caption)
+        }
+    }
+
+    private func color(for condition: SourceCondition) -> Color {
+        switch condition {
+        case .healthy: .green
+        case .stale, .degraded: .orange
+        case .unavailable: .red
+        case .notConfigured: .secondary
         }
     }
 }
@@ -221,11 +336,12 @@ private struct SessionRow: View {
                         .foregroundStyle(.orange)
                 }
                 cacheBadge
+                    .help(metricHelp(for: .transcripts))
             }
             HStack(spacing: 10) {
                 Text(Format.model(session.model))
                 HStack(spacing: 4) {
-                    Text("ctx \(Format.tokens(session.contextTokens))")
+                    Text("\(transcriptQualifier == nil ? "" : "~")ctx \(Format.tokens(session.contextTokens))")
                     if let fraction = contextFraction {
                         MiniBar(
                             fraction: fraction,
@@ -235,9 +351,12 @@ private struct SessionRow: View {
                         .help("Context window \(Int(fraction * 100))% full — auto-compact approaches at ~95%")
                     }
                 }
-                Text(Format.memory(session.memoryBytes))
+                .help(metricHelp(for: .transcripts))
+                Text("\(memoryQualifier == nil ? "" : "~")\(Format.memory(session.memoryBytes))")
+                    .help(metricHelp(for: .process))
                 if let cost = session.costUSD, cost > 0 {
-                    Text(cost, format: .currency(code: "USD"))
+                    Text("\(costQualifier == nil ? "" : "~")\(cost.formatted(.currency(code: "USD")))")
+                        .help(metricHelp(for: SessionMetric.cost.source))
                 }
                 Spacer()
                 // Both trailing views live in one ZStack so hover toggles opacity,
@@ -292,6 +411,25 @@ private struct SessionRow: View {
             let window = tokens > 180_000 ? 1_000_000.0 : 200_000.0
             return min(1, Double(tokens) / window)
         }
+    }
+
+    private var transcriptQualifier: String? {
+        fleet.metricQualifier(for: .transcripts, at: now)
+    }
+
+    private var memoryQualifier: String? {
+        fleet.metricQualifier(for: .process, at: now)
+    }
+
+    private var costQualifier: String? {
+        fleet.metricQualifier(for: SessionMetric.cost.source, at: now)
+    }
+
+    private func metricHelp(for source: SourceID) -> String {
+        guard let qualifier = fleet.metricQualifier(for: source, at: now) else {
+            return source.affectedMetrics
+        }
+        return "\(source.affectedMetrics) are \(qualifier). Open Data sources for details."
     }
 
     private var statusColor: Color {
