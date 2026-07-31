@@ -149,4 +149,153 @@ struct AlertTests {
         #expect(LaunchAtLoginStatus.enabled.isRegistered == true, "enabled is registered")
         #expect(LaunchAtLoginStatus.pendingApproval.isRegistered == true, "pending remains registered")
     }
+
+    @Test
+    func presentationQueueAdvancesConsecutiveAlertsWithoutViewLifecycle() {
+        let first = Alert(key: "first", title: "First", body: "One")
+        let second = Alert(key: "second", title: "Second", body: "Two")
+        var queue = AlertPresentationQueue()
+
+        #expect(queue.enqueue(first) == first, "idle queue presents immediately")
+        #expect(queue.enqueue(second) == nil, "busy queue retains the next alert")
+        #expect(queue.advance() == second, "completion explicitly advances to the next alert")
+        #expect(queue.advance() == nil, "queue becomes idle after the final alert")
+    }
+
+    @Test
+    func presentationQueueBoundsBurstsWithOneSummary() {
+        let alerts = (1...6).map {
+            Alert(key: "alert-\($0)", title: "Alert \($0)", body: "Body")
+        }
+        var queue = AlertPresentationQueue(maxPendingAlerts: 2)
+
+        #expect(queue.enqueue(alerts[0]) == alerts[0])
+        for alert in alerts.dropFirst() {
+            #expect(queue.enqueue(alert) == nil)
+        }
+
+        #expect(queue.advance() == alerts[1])
+        #expect(queue.advance() == alerts[2])
+        let summary = queue.advance()
+        #expect(summary?.title == "3 more Cachewatch alerts")
+        #expect(summary?.body == "Open Cachewatch to review the sessions that need attention.")
+        #expect(queue.advance() == nil, "the burst produces one bounded summary")
+    }
+
+    @Test
+    func deliveryRouteFallsBackWhenCustomSurfaceDoesNotAcceptAlert() {
+        #expect(AlertDeliveryRoute.choose(customSurfaceAccepted: true, isBundledApp: true) == .custom)
+        #expect(AlertDeliveryRoute.choose(customSurfaceAccepted: false, isBundledApp: true) == .native)
+        #expect(AlertDeliveryRoute.choose(customSurfaceAccepted: false, isBundledApp: false) == .legacy)
+    }
+
+    @Test
+    func deliveryBatchCoalescesHighVolumeBeforeAnySurface() {
+        let alerts = (1...6).map {
+            Alert(key: "alert-\($0)", title: "Alert \($0)", body: "Body")
+        }
+
+        let delivered = AlertDeliveryBatch.make(from: alerts, maxIndividualAlerts: 3)
+
+        #expect(delivered.prefix(3) == alerts.prefix(3))
+        #expect(delivered.count == 4)
+        #expect(delivered.last?.title == "3 more Cachewatch alerts")
+    }
+
+    @Test
+    func sustainedBurstPreservesCountsAcrossBatchAndQueueCoalescing() {
+        let alerts = (1...6).map {
+            Alert(key: "alert-\($0)", title: "Alert \($0)", body: "Body")
+        }
+        var queue = AlertPresentationQueue(maxPendingAlerts: 0)
+        _ = queue.enqueue(Alert(key: "current", title: "Current", body: "Body"))
+
+        for alert in AlertDeliveryBatch.make(from: alerts) {
+            _ = queue.enqueue(alert)
+        }
+
+        #expect(queue.advance()?.title == "6 more Cachewatch alerts")
+    }
+
+    @Test
+    func presentationQueueDrainsForFallbackWhenDisplayDisappears() {
+        let alerts = (1...4).map {
+            Alert(key: "alert-\($0)", title: "Alert \($0)", body: "Body")
+        }
+        var queue = AlertPresentationQueue(maxPendingAlerts: 1)
+        for alert in alerts {
+            _ = queue.enqueue(alert)
+        }
+
+        let fallback = queue.drain()
+
+        #expect(fallback.prefix(2) == alerts.prefix(2))
+        #expect(fallback.last?.title == "2 more Cachewatch alerts")
+        #expect(queue.current == nil)
+        #expect(queue.advance() == nil)
+    }
+
+    @Test
+    func customSurfaceNeverStaysFrontWithoutANotchedScreen() {
+        #expect(AlertSurfaceVisibility.shouldOrderFront(
+            hasNotchedScreen: false, hudEnabled: true, hasTransientContent: true
+        ) == false)
+        #expect(AlertSurfaceVisibility.shouldOrderFront(
+            hasNotchedScreen: true, hudEnabled: false, hasTransientContent: true
+        ) == true)
+        #expect(AlertSurfaceVisibility.shouldOrderFront(
+            hasNotchedScreen: true, hudEnabled: false, hasTransientContent: false
+        ) == false)
+    }
+
+    @Test
+    func expandedSurfaceCollapsesBeforeANotchedDisplayReconnects() {
+        #expect(AlertSurfaceVisibility.shouldCollapseTransientState(
+            hasNotchedScreen: false,
+            isExpanded: true
+        ))
+        #expect(!AlertSurfaceVisibility.shouldCollapseTransientState(
+            hasNotchedScreen: true,
+            isExpanded: true
+        ))
+        #expect(!AlertSurfaceVisibility.shouldCollapseTransientState(
+            hasNotchedScreen: false,
+            isExpanded: false
+        ))
+    }
+
+    @Test
+    func customSurfaceFollowsTheActiveConnectedDisplay() {
+        let laptop = AlertDisplay(id: 1, hasNotch: true)
+        let external = AlertDisplay(id: 2, hasNotch: false)
+
+        #expect(AlertDisplayPolicy.customSurfaceTarget(
+            activeDisplayID: external.id, connectedDisplays: [laptop, external]
+        ) == nil, "external active display uses native notifications")
+        #expect(AlertDisplayPolicy.customSurfaceTarget(
+            activeDisplayID: laptop.id, connectedDisplays: [laptop, external]
+        ) == laptop)
+        #expect(AlertDisplayPolicy.customSurfaceTarget(
+            activeDisplayID: laptop.id, connectedDisplays: [external]
+        ) == nil, "a disconnected laptop cannot retain the custom surface")
+    }
+
+    @Test
+    func informationalAlertSurfaceNeverInterceptsMouseInput() {
+        #expect(AlertSurfaceInteraction.shouldIgnoreMouseEvents(isInformationalAlert: true))
+        #expect(!AlertSurfaceInteraction.shouldIgnoreMouseEvents(isInformationalAlert: false))
+    }
+
+    @Test
+    func acceptedPresentationStaysOnItsConnectedDisplayWhenPointerMoves() {
+        let laptop = AlertDisplay(id: 1, hasNotch: true)
+        let external = AlertDisplay(id: 2, hasNotch: false)
+        var presentation = AlertPresentationDisplay()
+        presentation.accept(displayID: laptop.id)
+
+        #expect(presentation.connectedTarget(in: [laptop, external]) == laptop)
+        #expect(presentation.connectedTarget(in: [external]) == nil)
+        presentation.clear()
+        #expect(presentation.connectedTarget(in: [laptop, external]) == nil)
+    }
 }

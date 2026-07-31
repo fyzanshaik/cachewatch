@@ -110,9 +110,11 @@ final class AlertCenter {
         let alerts = AlertEngine.evaluate(
             fleet: fleet, config: state.alerts, now: Date(), alreadyFired: state.firedAlertKeys
         )
-        for alert in alerts {
+        for alert in AlertDeliveryBatch.make(from: alerts) {
             deliver(alert)
-            state.firedAlertKeys.insert(alert.key)
+        }
+        if !alerts.isEmpty {
+            state.firedAlertKeys.formUnion(alerts.map(\.key))
             changed = true
         }
         if changed {
@@ -121,9 +123,21 @@ final class AlertCenter {
     }
 
     private func deliver(_ alert: Alert) {
-        if let notch, notch.canShow {
-            notch.show(alert)
-        } else if isBundledApp {
+        let customAccepted = notch?.show(alert) ?? false
+        switch AlertDeliveryRoute.choose(customSurfaceAccepted: customAccepted, isBundledApp: isBundledApp) {
+        case .custom:
+            break
+        case .native:
+            deliverNativeNotification(alert)
+        case .legacy:
+            deliverOSAScript(alert)
+        }
+    }
+
+    /// Used when a display change interrupts alerts already accepted by the
+    /// custom surface. Never retries that surface recursively.
+    func deliverWithoutCustomSurface(_ alert: Alert) {
+        if isBundledApp {
             deliverNativeNotification(alert)
         } else {
             deliverOSAScript(alert)

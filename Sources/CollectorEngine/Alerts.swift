@@ -67,11 +67,174 @@ public struct Alert: Sendable, Equatable {
     public let key: String
     public let title: String
     public let body: String
+    /// Number of underlying alert conditions represented by this presentation item.
+    public let representedCount: Int
 
-    public init(key: String, title: String, body: String) {
+    public init(key: String, title: String, body: String, representedCount: Int = 1) {
         self.key = key
         self.title = title
         self.body = body
+        self.representedCount = max(1, representedCount)
+    }
+}
+
+/// Presentation state for one-at-a-time alert surfaces. Timing belongs to the
+/// presenter; advancing the queue never depends on SwiftUI view identity.
+public struct AlertPresentationQueue: Sendable, Equatable {
+    public private(set) var current: Alert?
+    private var pending: [Alert] = []
+    private let maxPendingAlerts: Int
+    private var overflowCount = 0
+    private var firstOverflowKey: String?
+
+    public init(maxPendingAlerts: Int = 3) {
+        self.maxPendingAlerts = max(0, maxPendingAlerts)
+    }
+
+    /// Returns the alert to present when the queue was idle, otherwise retains it.
+    @discardableResult
+    public mutating func enqueue(_ alert: Alert) -> Alert? {
+        guard current == nil else {
+            if pending.count < maxPendingAlerts {
+                pending.append(alert)
+            } else {
+                overflowCount += alert.representedCount
+                firstOverflowKey = firstOverflowKey ?? alert.key
+            }
+            return nil
+        }
+        current = alert
+        return alert
+    }
+
+    /// Completes the current presentation and returns the next alert, if any.
+    @discardableResult
+    public mutating func advance() -> Alert? {
+        if !pending.isEmpty {
+            current = pending.removeFirst()
+        } else if overflowCount > 0 {
+            let count = overflowCount
+            current = AlertDeliveryBatch.summary(count: count, firstOmittedKey: firstOverflowKey)
+            overflowCount = 0
+            firstOverflowKey = nil
+        } else {
+            current = nil
+        }
+        return current
+    }
+
+    /// Removes every retained presentation so another delivery surface can take over.
+    /// This intentionally includes the currently visible alert: display loss uses
+    /// at-least-once delivery because a banner that vanished mid-presentation may
+    /// not have been seen.
+    public mutating func drain() -> [Alert] {
+        var alerts = current.map { [$0] } ?? []
+        alerts.append(contentsOf: pending)
+        if overflowCount > 0 {
+            alerts.append(AlertDeliveryBatch.summary(count: overflowCount, firstOmittedKey: firstOverflowKey))
+        }
+        current = nil
+        pending.removeAll()
+        overflowCount = 0
+        firstOverflowKey = nil
+        return alerts
+    }
+}
+
+public enum AlertDeliveryBatch {
+    public static func make(from alerts: [Alert], maxIndividualAlerts: Int = 3) -> [Alert] {
+        let limit = max(0, maxIndividualAlerts)
+        guard alerts.count > limit else { return alerts }
+        let omitted = alerts.dropFirst(limit).reduce(0) { $0 + $1.representedCount }
+        let firstOmittedKey = alerts[limit].key
+        return Array(alerts.prefix(limit)) + [summary(count: omitted, firstOmittedKey: firstOmittedKey)]
+    }
+
+    static func summary(count: Int, firstOmittedKey: String?) -> Alert {
+        Alert(
+            key: "notification-summary-\(firstOmittedKey ?? "overflow")",
+            title: "\(count) more Cachewatch alert\(count == 1 ? "" : "s")",
+            body: "Open Cachewatch to review the sessions that need attention.",
+            representedCount: count
+        )
+    }
+}
+
+public enum AlertDeliveryRoute: Sendable, Equatable {
+    case custom
+    case native
+    case legacy
+
+    public static func choose(customSurfaceAccepted: Bool, isBundledApp: Bool) -> Self {
+        if customSurfaceAccepted { return .custom }
+        return isBundledApp ? .native : .legacy
+    }
+}
+
+public enum AlertSurfaceVisibility {
+    public static func shouldOrderFront(
+        hasNotchedScreen: Bool,
+        hudEnabled: Bool,
+        hasTransientContent: Bool
+    ) -> Bool {
+        hasNotchedScreen && (hudEnabled || hasTransientContent)
+    }
+
+    public static func shouldCollapseTransientState(
+        hasNotchedScreen: Bool,
+        isExpanded: Bool
+    ) -> Bool {
+        !hasNotchedScreen && isExpanded
+    }
+}
+
+public enum AlertSurfaceInteraction {
+    public static func shouldIgnoreMouseEvents(isInformationalAlert: Bool) -> Bool {
+        isInformationalAlert
+    }
+}
+
+public struct AlertDisplay: Sendable, Equatable {
+    public let id: Int
+    public let hasNotch: Bool
+
+    public init(id: Int, hasNotch: Bool) {
+        self.id = id
+        self.hasNotch = hasNotch
+    }
+}
+
+public enum AlertDisplayPolicy {
+    public static func customSurfaceTarget(
+        activeDisplayID: Int?,
+        connectedDisplays: [AlertDisplay]
+    ) -> AlertDisplay? {
+        guard let activeDisplayID,
+              let active = connectedDisplays.first(where: { $0.id == activeDisplayID }),
+              active.hasNotch
+        else { return nil }
+        return active
+    }
+}
+
+public struct AlertPresentationDisplay: Sendable, Equatable {
+    public private(set) var displayID: Int?
+
+    public init() {}
+
+    public mutating func accept(displayID: Int) {
+        self.displayID = displayID
+    }
+
+    public mutating func clear() {
+        displayID = nil
+    }
+
+    public func connectedTarget(in displays: [AlertDisplay]) -> AlertDisplay? {
+        AlertDisplayPolicy.customSurfaceTarget(
+            activeDisplayID: displayID,
+            connectedDisplays: displays
+        )
     }
 }
 
