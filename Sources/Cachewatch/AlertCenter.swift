@@ -11,11 +11,13 @@ final class AlertCenter {
     private let history = QuotaHistoryStore()
     private let notificationPresenter = ForegroundNotificationPresenter()
     private var state: AppState
+    private(set) var quotaSamples: [QuotaSample]
     weak var notch: NotchSurface?
 
     init() {
         state = store.load()
         history.prune()
+        quotaSamples = history.load()
         if isBundledApp {
             reconcileLaunchAtLoginState()
             UNUserNotificationCenter.current().delegate = notificationPresenter
@@ -104,14 +106,16 @@ final class AlertCenter {
             state.lastRateLimits = limits
             state.lastRateLimitsAsOf = fleet.rateLimitsAsOf
             changed = true
-            history.append(QuotaSample(
+            let sample = QuotaSample(
                 recordedAt: fleet.rateLimitsAsOf ?? Date(),
                 fiveHourUsedPercentage: limits.fiveHour?.usedPercentage,
                 fiveHourResetsAt: limits.fiveHour?.resetsAt,
                 sevenDayUsedPercentage: limits.sevenDay?.usedPercentage,
                 sevenDayResetsAt: limits.sevenDay?.resetsAt,
                 cumulativeTurnCostUSD: fleet.cumulativeTurnCostUSD
-            ))
+            )
+            history.append(sample)
+            quotaSamples.append(sample)
         }
         if fleet.calibration != state.calibration {
             state.calibration = fleet.calibration

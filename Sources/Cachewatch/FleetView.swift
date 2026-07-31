@@ -170,7 +170,111 @@ struct FleetView: View {
                     Spacer()
                 }
             }
+            QuotaBurnRateSection(
+                samples: model.alertCenter.quotaSamples,
+                now: now,
+                sourceQualifier: quotaQualifier
+            )
         }
+    }
+}
+
+private struct QuotaBurnRateSection: View {
+    let samples: [QuotaSample]
+    let now: Date
+    let sourceQualifier: String?
+
+    private var fiveHour: QuotaBurnRate {
+        QuotaBurnRate.derive(from: samples, window: .fiveHour)
+    }
+
+    private var sevenDay: QuotaBurnRate {
+        QuotaBurnRate.derive(from: samples, window: .sevenDay)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                burnRow(label: "5h", trend: fiveHour)
+                burnRow(label: "7d", trend: sevenDay)
+            }
+            if let projected = sevenDay.actionableProjectedExhaustion(at: now) {
+                Text(
+                    sourceQualifier == nil
+                        ? "On this pace, weekly cap exhausts \(projected.formatted(.dateTime.weekday(.abbreviated).hour().minute()))"
+                        : "Estimate from last samples: weekly cap exhausts \(projected.formatted(.dateTime.weekday(.abbreviated).hour().minute()))"
+                )
+                    .foregroundStyle(.orange)
+            } else if !sevenDay.isCurrent(at: now), !sevenDay.points.isEmpty {
+                Text("Waiting for the current weekly window")
+                    .foregroundStyle(.tertiary)
+            } else if sevenDay.projectedExhaustionAt != nil {
+                Text("Waiting for a newer weekly quota sample")
+                    .foregroundStyle(.tertiary)
+            } else if sevenDay.percentagePointsPerHour != nil {
+                Text("Weekly pace stays within this window")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Collecting quota history for burn rate")
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .font(.caption2)
+    }
+
+    private func burnRow(label: String, trend: QuotaBurnRate) -> some View {
+        let isCurrent = trend.isCurrent(at: now)
+        let rate = isCurrent ? trend.percentagePointsPerHour : nil
+        let displayedRate = rate.map {
+            "\(sourceQualifier == nil ? "" : "~")\(String(format: "%.1f%%/h", $0))"
+        } ?? (!isCurrent && !trend.points.isEmpty ? "expired" : "—")
+        return HStack(spacing: 5) {
+            Text("\(label) rate")
+                .foregroundStyle(.secondary)
+            QuotaSparkline(points: trend.points)
+                .frame(width: 76, height: 18)
+                .accessibilityHidden(true)
+            Text(displayedRate)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(minWidth: 50, alignment: .trailing)
+        }
+        .help("\(trend.points.count) accepted quota samples from the current \(label) window")
+    }
+}
+
+private struct QuotaSparkline: View {
+    let points: [QuotaBurnPoint]
+
+    var body: some View {
+        Canvas { context, size in
+            guard let first = points.first, let last = points.last else { return }
+            let duration = max(1, last.recordedAt.timeIntervalSince(first.recordedAt))
+            func position(for point: QuotaBurnPoint) -> CGPoint {
+                CGPoint(
+                    x: size.width * point.recordedAt.timeIntervalSince(first.recordedAt) / duration,
+                    y: size.height * (1 - point.usedPercentage / 100)
+                )
+            }
+            if points.count == 1 {
+                let point = position(for: first)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: point.x - 1.5, y: point.y - 1.5, width: 3, height: 3)),
+                    with: .color(.secondary)
+                )
+            } else {
+                var path = Path()
+                path.move(to: position(for: first))
+                for point in points.dropFirst() {
+                    path.addLine(to: position(for: point))
+                }
+                context.stroke(path, with: .color(.secondary), lineWidth: 1.5)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.secondary.opacity(0.08))
+        )
     }
 }
 
