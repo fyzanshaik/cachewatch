@@ -324,17 +324,19 @@ private struct SessionRow: View {
             HStack(spacing: 4) {
                 Text("cold")
                     .foregroundStyle(.secondary)
-                if let resume = Pricing.costToResume(for: session, at: now) {
+                if let estimate = Pricing.resumeEstimate(for: session, at: now) {
+                    let resume = estimate.costUSD
+                    let basis = Format.pricingBasis(estimate, model: session.model ?? estimate.price.match)
                     // On a Plan with a fitted calibration, speak in quota; else dollars.
                     if fleet.rateLimits != nil,
                        let pct = fleet.calibration.percentOfWindow(forCost: resume) {
                         Text("~\(pct, format: .number.precision(.fractionLength(pct < 1 ? 1 : 0)))% 5h")
                             .foregroundStyle(.orange.opacity(0.9))
-                            .help("Cost to resume as a share of your 5-hour window, from observed quota burn on this account")
+                            .help("Estimated cost to resume as a share of your 5-hour window, from observed quota burn on this account.\n\(basis)")
                     } else {
                         Text("~\(resume, format: .currency(code: "USD"))")
                             .foregroundStyle(.orange.opacity(0.9))
-                            .help("Cost to resume: the full-context rewrite the next prompt pays (API list price; quota-weight proxy on a subscription)")
+                            .help("Estimated full-context rewrite cost for the next prompt; API list-price equivalent, quota-weight proxy on a subscription.\n\(basis)")
                     }
                 }
             }
