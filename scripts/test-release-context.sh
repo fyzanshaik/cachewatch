@@ -19,6 +19,7 @@ if "$context_script" schedule main 0.0.0 >/dev/null 2>&1; then
 fi
 
 grep -Fq 'workflow_dispatch:' "$workflow"
+grep -Fq 'uses: actions/checkout@v7' "$workflow"
 grep -Fq "scripts/release-context.sh \\" "$workflow"
 grep -Fq "\"\$GITHUB_EVENT_NAME\" \\" "$workflow"
 grep -Fq "\"\$GITHUB_REF_NAME\" \\" "$workflow"
