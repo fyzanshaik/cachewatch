@@ -12,7 +12,10 @@ func runSetup() {
 
     do {
         try fm.createDirectory(atPath: scriptDir, withIntermediateDirectories: true)
-        try Data(forwarderScript.utf8).write(to: URL(fileURLWithPath: scriptPath), options: .atomic)
+        try Data(StatuslineSetup.forwarderScript.utf8).write(
+            to: URL(fileURLWithPath: scriptPath),
+            options: .atomic
+        )
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath)
         print("installed \(scriptPath)")
 
@@ -39,36 +42,3 @@ func runSetup() {
         exit(1)
     }
 }
-
-/// Kept in sync with scripts/cachewatch-statusline.sh so `setup` works from any
-/// install location (brew, git clone, bare binary).
-private let forwarderScript = #"""
-#!/bin/sh
-# Cachewatch statusline forwarder (installed by `cachewatch setup`).
-#
-# Renders a compact statusline and forwards the JSON to Cachewatch's socket.
-# If Cachewatch isn't running the forward is a no-op. To chain another
-# statusline display, set CACHEWATCH_NEXT_STATUSLINE to its command.
-
-INPUT=$(cat)
-SOCK="${CACHEWATCH_SOCK:-$HOME/.cachewatch/statusline.sock}"
-
-# Foreground on purpose: Claude Code kills the script's process group on exit,
-# reaping backgrounded children before they deliver. The listener closes the
-# connection as soon as it decodes the JSON, so this returns in milliseconds;
-# -w 1 bounds the cost if the listener is wedged.
-if [ -S "$SOCK" ]; then
-    printf '%s' "$INPUT" | nc -U -w 1 "$SOCK" >/dev/null 2>&1
-fi
-
-if [ -n "$CACHEWATCH_NEXT_STATUSLINE" ]; then
-    printf '%s' "$INPUT" | $CACHEWATCH_NEXT_STATUSLINE
-elif command -v jq >/dev/null 2>&1; then
-    printf '%s' "$INPUT" | jq -r '[
-        .model.display_name,
-        (if .context_window.used_percentage != null then "ctx \(.context_window.used_percentage | round)%" else empty end),
-        (if .rate_limits.five_hour.used_percentage != null then "5h \(.rate_limits.five_hour.used_percentage | round)%" else empty end),
-        (if .rate_limits.seven_day.used_percentage != null then "7d \(.rate_limits.seven_day.used_percentage | round)%" else empty end)
-    ] | map(select(. != null)) | join(" | ")'
-fi
-"""#
