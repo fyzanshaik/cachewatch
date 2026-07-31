@@ -5,6 +5,7 @@ import CollectorEngine
 @Suite
 struct PricingTests {
     let now = Date(timeIntervalSince1970: 1_784_800_000)
+    let sonnet5StandardPricingStarts = Date(timeIntervalSince1970: 1_788_220_800)
 
     func coldSession(model: String, context: Int, ttl: CacheTTL = .oneHour) -> SessionSnapshot {
         var s = SessionSnapshot(
@@ -16,6 +17,106 @@ struct PricingTests {
         s.cacheTTL = ttl
         s.lastTurnAt = now.addingTimeInterval(-2 * 3600)  // beyond any TTL: cold
         return s
+    }
+
+    @Test
+    func sonnet5PriceChangesAtSeptember2026UTCBoundary() {
+        #expect(Pricing.baseInputRate(
+            model: "claude-sonnet-5",
+            at: sonnet5StandardPricingStarts.addingTimeInterval(-1)
+        ) == 2.0)
+        #expect(Pricing.baseInputRate(
+            model: "claude-sonnet-5",
+            at: sonnet5StandardPricingStarts
+        ) == 3.0)
+    }
+
+    @Test
+    func turnCostUsesTheRateEffectiveAtTheTurnTimestamp() {
+        let usage = TurnUsage(
+            inputTokens: 1_000_000,
+            outputTokens: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            ephemeral5mTokens: 0,
+            ephemeral1hTokens: 0
+        )
+
+        #expect(Pricing.turnCostUSD(
+            model: "claude-sonnet-5", usage: usage,
+            at: sonnet5StandardPricingStarts.addingTimeInterval(-1)
+        ) == 2.0)
+        #expect(Pricing.turnCostUSD(
+            model: "claude-sonnet-5", usage: usage,
+            at: sonnet5StandardPricingStarts
+        ) == 3.0)
+    }
+
+    @Test
+    func mostSpecificModelPriceWins() {
+        #expect(Pricing.baseInputRate(model: "claude-opus-5", at: now) == 5.0)
+        #expect(Pricing.baseInputRate(model: "claude-opus-4-1", at: now) == 15.0)
+        #expect(Pricing.baseInputRate(model: "claude-opus-4-8", at: now) == 5.0)
+        #expect(Pricing.baseInputRate(model: "claude-mystery-9", at: now) == nil)
+    }
+
+    @Test
+    func resumeEstimateExposesItsEffectivePriceBasis() throws {
+        let estimate = try #require(Pricing.resumeEstimate(
+            for: coldSession(
+                model: "claude-sonnet-5",
+                context: 200_000,
+                ttl: .fiveMinutes
+            ),
+            at: now
+        ))
+
+        #expect(estimate.costUSD == 0.5)
+        #expect(estimate.price.inputPerMTok == 2.0)
+        #expect(estimate.writeMultiplier == 1.25)
+        #expect(estimate.price.sourceURL == Pricing.sourceURL)
+    }
+
+    @Test
+    func coldResumeUsesTheRateEffectiveWhenTheEstimateIsMade() {
+        let session = coldSession(
+            model: "claude-sonnet-5",
+            context: 200_000,
+            ttl: .fiveMinutes
+        )
+
+        #expect(Pricing.costToResume(
+            for: session,
+            at: sonnet5StandardPricingStarts.addingTimeInterval(-1)
+        ) == 0.5)
+        let postBoundary = Pricing.costToResume(
+            for: session,
+            at: sonnet5StandardPricingStarts
+        )
+        #expect(postBoundary.map { abs($0 - 0.75) < 0.000_001 } == true)
+    }
+
+    @Test
+    func reducerPricesReplayedTurnsAtTheirOwnTimestamps() {
+        let usage = TurnUsage(
+            inputTokens: 1_000_000,
+            outputTokens: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            ephemeral5mTokens: 0,
+            ephemeral1hTokens: 0
+        )
+        var reducer = FleetReducer()
+        reducer.apply(.assistantTurn(AssistantTurn(
+            sessionId: "before", timestamp: sonnet5StandardPricingStarts.addingTimeInterval(-1),
+            model: "claude-sonnet-5", gitBranch: nil, isSidechain: false, usage: usage
+        )))
+        reducer.apply(.assistantTurn(AssistantTurn(
+            sessionId: "after", timestamp: sonnet5StandardPricingStarts,
+            model: "claude-sonnet-5", gitBranch: nil, isSidechain: false, usage: usage
+        )))
+
+        #expect(reducer.snapshot.cumulativeTurnCostUSD == 5.0)
     }
 
     @Test

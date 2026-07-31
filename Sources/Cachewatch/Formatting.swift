@@ -37,6 +37,13 @@ enum Format {
         let base = id.split(separator: "[").first.map(String.init) ?? id
         return base.replacingOccurrences(of: "claude-", with: "")
     }
+
+    static func pricingBasis(_ estimate: ResumeCostEstimate, model: String) -> String {
+        let rate = String(format: "%g", estimate.price.inputPerMTok)
+        let multiplier = String(format: "%g", estimate.writeMultiplier)
+        let ttl = estimate.writeMultiplier == 2.0 ? "1h" : "5m"
+        return "Estimate · \(model) · $\(rate)/MTok base · \(ttl) cache write \(multiplier)× · \(estimate.price.sourceURL.absoluteString)"
+    }
 }
 
 func printDump() {
