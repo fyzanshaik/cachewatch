@@ -28,6 +28,16 @@ final class AlertCenter {
         state.calibration ?? QuotaCalibrator()
     }
 
+    var alertConfig: AlertConfig {
+        state.alerts
+    }
+
+    func updateAlertConfig(_ config: AlertConfig) {
+        guard state.alerts != config else { return }
+        state.alerts = config
+        store.save(state)
+    }
+
     var notchHUDEnabled: Bool {
         get { state.notchHUDEnabled }
         set {
