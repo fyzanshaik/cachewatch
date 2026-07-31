@@ -53,4 +53,17 @@ struct SetupTests {
         let settings = try dict(result.settings)
         #expect(settings["statusLine"] != nil, "statusLine present")
     }
+
+    @Test
+    func embeddedForwarderMatchesCanonicalScriptExactly() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let scriptURL = repoRoot.appending(path: "scripts/cachewatch-statusline.sh")
+        let canonicalBytes = try Data(contentsOf: scriptURL)
+        let embeddedBytes = Data(StatuslineSetup.forwarderScript.utf8)
+
+        #expect(embeddedBytes == canonicalBytes)
+    }
 }
