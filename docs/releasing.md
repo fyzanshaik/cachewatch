@@ -42,6 +42,20 @@ Configure these repository Actions secrets:
 The workflow imports the certificate into a temporary keychain on the GitHub
 runner. The runner is discarded after the job.
 
+## Validate the workflow
+
+Run the workflow manually before relying on tag publication:
+
+```sh
+gh workflow run Release --field version=0.0.0
+gh run watch
+```
+
+A manual run builds and verifies the app and CLI archives, checks their
+checksums, and renders the Homebrew definitions. It always uses ad-hoc signing
+and never publishes a GitHub release, contacts Apple's notary service, or opens
+a pull request in the tap repository.
+
 ## Publish
 
 Run the normal test and local ad-hoc packaging checks before creating a tag:

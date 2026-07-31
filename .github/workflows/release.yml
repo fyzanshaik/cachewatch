@@ -1,6 +1,12 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version used for a non-publishing package dry run
+        required: true
+        default: 0.0.0
   push:
     tags:
       - "v*"
@@ -14,6 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Determine release context
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          scripts/release-context.sh \
+            "$GITHUB_EVENT_NAME" \
+            "$GITHUB_REF_NAME" \
+            "$MANUAL_VERSION" >> "$GITHUB_ENV"
+
       - name: Determine release signing mode
         env:
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
@@ -22,6 +37,12 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
+          if [[ "$CACHEWATCH_PUBLISH" != "true" ]]; then
+            echo "Dry-run packaging uses ad-hoc signing and does not contact Apple's notary service."
+            echo "CACHEWATCH_NOTARIZE_RELEASE=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
           configured=0
           missing=0
           for variable_name in \
@@ -50,6 +71,7 @@ jobs:
           fi
 
       - name: Validate tap credentials
+        if: env.CACHEWATCH_PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
@@ -63,7 +85,9 @@ jobs:
           fi
 
       - name: Verify
-        run: swift test
+        run: |
+          scripts/test-release-context.sh
+          swift test
 
       - name: Import Developer ID certificate
         if: env.CACHEWATCH_NOTARIZE_RELEASE == 'true'
@@ -101,7 +125,7 @@ jobs:
       - name: Build release packages
         env:
           CACHEWATCH_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
-        run: scripts/package-release.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/dist"
+        run: scripts/package-release.sh "$CACHEWATCH_RELEASE_TAG" "$RUNNER_TEMP/dist"
 
       - name: Notarize and staple release packages
         if: env.CACHEWATCH_NOTARIZE_RELEASE == 'true'
@@ -110,31 +134,33 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${CACHEWATCH_RELEASE_TAG#v}"
           scripts/notarize-release.sh \
             "$RUNNER_TEMP/dist/Cachewatch-${version}-macos-arm64.zip"
 
       - name: Test release packages
         run: |
           verification_args=(
-            "$RUNNER_TEMP/dist/Cachewatch-${GITHUB_REF_NAME#v}-macos-arm64.zip"
-            "$GITHUB_REF_NAME"
+            "$RUNNER_TEMP/dist/Cachewatch-${CACHEWATCH_RELEASE_TAG#v}-macos-arm64.zip"
+            "$CACHEWATCH_RELEASE_TAG"
           )
           if [[ "$CACHEWATCH_NOTARIZE_RELEASE" == "true" ]]; then
             verification_args+=(--require-notarization)
           fi
           scripts/test-release-package.sh "${verification_args[@]}"
+          (cd "$RUNNER_TEMP/dist" && shasum -a 256 -c SHA256SUMS)
 
       - name: Publish GitHub release
+        if: env.CACHEWATCH_PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP"/dist/* \
+          if gh release view "$CACHEWATCH_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$CACHEWATCH_RELEASE_TAG" "$RUNNER_TEMP"/dist/* \
               --repo "$GITHUB_REPOSITORY" \
               --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/dist/* \
+            gh release create "$CACHEWATCH_RELEASE_TAG" "$RUNNER_TEMP"/dist/* \
               --repo "$GITHUB_REPOSITORY" \
               --generate-notes \
               --verify-tag
@@ -142,17 +168,18 @@ jobs:
 
       - name: Render Homebrew cask
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${CACHEWATCH_RELEASE_TAG#v}"
           app_sha="$(shasum -a 256 "$RUNNER_TEMP/dist/Cachewatch-${version}-macos-arm64.zip" | awk '{print $1}')"
           cli_sha="$(shasum -a 256 "$RUNNER_TEMP/dist/cachewatch-${version}-macos-arm64.tar.gz" | awk '{print $1}')"
           scripts/render-homebrew-cask.sh "$version" "$app_sha" "$RUNNER_TEMP/cachewatch-cask.rb"
           scripts/render-homebrew-formula.sh "$version" "$cli_sha" "$RUNNER_TEMP/cachewatch-formula.rb"
 
       - name: Open tap update pull request
+        if: env.CACHEWATCH_PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${CACHEWATCH_RELEASE_TAG#v}"
           branch="cachewatch-${version}"
           gh auth setup-git
           gh repo clone fyzanshaik/homebrew-tap "$RUNNER_TEMP/homebrew-tap"
@@ -171,4 +198,4 @@ jobs:
             --base main \
             --head "$branch" \
             --title "Update Cachewatch to ${version}" \
-            --body "Generated from fyzanshaik/cachewatch ${GITHUB_REF_NAME}."
+            --body "Generated from fyzanshaik/cachewatch ${CACHEWATCH_RELEASE_TAG}."
