@@ -53,6 +53,24 @@ struct PricingTests {
     }
 
     @Test
+    func turnCostRejectsMalformedUsageBeforeArithmetic() {
+        let usage = TurnUsage(
+            inputTokens: -1,
+            outputTokens: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: Int.min,
+            ephemeral5mTokens: 1,
+            ephemeral1hTokens: 0
+        )
+
+        #expect(Pricing.turnCostUSD(
+            model: "claude-opus-4-8",
+            usage: usage,
+            at: now
+        ) == nil)
+    }
+
+    @Test
     func mostSpecificModelPriceWins() {
         #expect(Pricing.baseInputRate(model: "claude-opus-5", at: now) == 5.0)
         #expect(Pricing.baseInputRate(model: "claude-opus-4-1", at: now) == 15.0)
@@ -146,14 +164,24 @@ struct PricingTests {
 struct CacheMissTests {
     let base = Date(timeIntervalSince1970: 1_784_810_000)
 
-    func turn(at date: Date, read: Int, write: Int, ttl1h: Bool = true) -> AssistantTurn {
+    func turn(
+        at date: Date,
+        read: Int,
+        write: Int,
+        ttl1h: Bool = true,
+        ttlKnown: Bool = true,
+        usageIsComplete: Bool = true
+    ) -> AssistantTurn {
         AssistantTurn(
             sessionId: "sess-a", timestamp: date, model: "claude-opus-4-8",
             gitBranch: "main", isSidechain: false,
             usage: TurnUsage(
                 inputTokens: 10, outputTokens: 5,
                 cacheReadInputTokens: read, cacheCreationInputTokens: write,
-                ephemeral5mTokens: ttl1h ? 0 : write, ephemeral1hTokens: ttl1h ? write : 0
+                ephemeral5mTokens: ttlKnown && !ttl1h ? write : 0,
+                ephemeral1hTokens: ttlKnown && ttl1h ? write : 0,
+                unclassifiedCacheCreationTokens: ttlKnown ? 0 : write,
+                isCompleteForCacheSummary: usageIsComplete
             )
         )
     }
@@ -173,6 +201,8 @@ struct CacheMissTests {
         reducer.apply(.assistantTurn(turn(at: base.addingTimeInterval(600), read: 0, write: 201_000)))
         let s = reducer.snapshot.sessions[0]
         #expect(s.lastCacheMissAt == base.addingTimeInterval(600), "miss recorded")
+        #expect(s.cacheSummary?.fullWarmMisses == 1, "same miss feeds session summary")
+        #expect(s.cacheSummary?.interpretation == .warmMissObserved)
     }
 
     @Test
@@ -185,12 +215,148 @@ struct CacheMissTests {
     }
 
     @Test
+    func zeroCacheActivityDoesNotRefreshStrictTTL() throws {
+        var reducer = FleetReducer()
+        reducer.apply(.registrySnapshot([try registryEntry()]))
+        reducer.apply(.assistantTurn(turn(
+            at: base,
+            read: 200_000,
+            write: 1_000,
+            ttl1h: false
+        )))
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(4 * 60),
+            read: 0,
+            write: 0,
+            ttl1h: false
+        )))
+
+        #expect(reducer.snapshot.sessions[0].cacheState(
+            at: base.addingTimeInterval(5 * 60 + 1)
+        ) == .cold)
+
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(8 * 60),
+            read: 0,
+            write: 201_000,
+            ttl1h: false
+        )))
+        #expect(reducer.snapshot.sessions[0].lastCacheMissAt == nil)
+        #expect(reducer.snapshot.sessions[0].cacheSummary?.fullWarmMisses == 0)
+    }
+
+    @Test
     func normalWarmTurnIsNotAMiss() throws {
         var reducer = FleetReducer()
         reducer.apply(.registrySnapshot([try registryEntry()]))
         reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1000)))
         reducer.apply(.assistantTurn(turn(at: base.addingTimeInterval(600), read: 201_000, write: 2000)))
         #expect(reducer.snapshot.sessions[0].lastCacheMissAt == nil, "warm read, no miss")
+    }
+
+    @Test
+    func incompleteUsageCannotCreateAFalseWarmMiss() throws {
+        var reducer = FleetReducer()
+        reducer.apply(.registrySnapshot([try registryEntry()]))
+        reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1_000)))
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(600),
+            read: 0,
+            write: 201_000,
+            usageIsComplete: false
+        )))
+
+        let session = reducer.snapshot.sessions[0]
+        #expect(session.lastCacheMissAt == nil)
+        #expect(session.cacheSummary?.fullWarmMisses == 0)
+        #expect(session.cacheSummary?.main.evidenceQuality == .incomplete)
+    }
+
+    @Test
+    func incompleteUsageBreaksLaterWarmMissAttribution() throws {
+        var reducer = FleetReducer()
+        reducer.apply(.registrySnapshot([try registryEntry()]))
+        reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1_000)))
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(5 * 60),
+            read: 0,
+            write: 0,
+            usageIsComplete: false
+        )))
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(10 * 60),
+            read: 0,
+            write: 201_000
+        )))
+
+        let session = reducer.snapshot.sessions[0]
+        #expect(session.lastCacheMissAt == nil)
+        #expect(session.cacheSummary?.fullWarmMisses == 0)
+    }
+
+    @Test
+    func lateIncompleteUsageRetractsWarmMissAcrossItsTimestamp() throws {
+        var reducer = FleetReducer()
+        reducer.apply(.registrySnapshot([try registryEntry()]))
+        reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1_000)))
+        let missAt = base.addingTimeInterval(10 * 60)
+        reducer.apply(.assistantTurn(turn(at: missAt, read: 0, write: 201_000)))
+        #expect(reducer.snapshot.sessions[0].cacheSummary?.fullWarmMisses == 1)
+
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(5 * 60),
+            read: 0,
+            write: 0,
+            usageIsComplete: false
+        )))
+
+        let session = reducer.snapshot.sessions[0]
+        #expect(session.lastCacheMissAt == nil)
+        #expect(session.cacheSummary?.fullWarmMisses == 0)
+    }
+
+    @Test
+    func lateUnknownTTLWriteRetractsWarmMissAcrossItsTimestamp() throws {
+        var reducer = FleetReducer()
+        reducer.apply(.registrySnapshot([try registryEntry()]))
+        reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1_000)))
+        let missAt = base.addingTimeInterval(10 * 60)
+        reducer.apply(.assistantTurn(turn(at: missAt, read: 0, write: 201_000)))
+        #expect(reducer.snapshot.sessions[0].cacheSummary?.fullWarmMisses == 1)
+
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(5 * 60),
+            read: 100_000,
+            write: 60_000,
+            ttlKnown: false
+        )))
+
+        let session = reducer.snapshot.sessions[0]
+        #expect(session.lastCacheMissAt == nil)
+        #expect(session.cacheSummary?.fullWarmMisses == 0)
+    }
+
+    @Test
+    func unknownTTLWriteClearsPriorTTLAndBreaksMissAttribution() throws {
+        var reducer = FleetReducer()
+        reducer.apply(.registrySnapshot([try registryEntry()]))
+        reducer.apply(.assistantTurn(turn(at: base, read: 200_000, write: 1_000)))
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(5 * 60),
+            read: 100_000,
+            write: 60_000,
+            ttlKnown: false
+        )))
+        #expect(reducer.snapshot.sessions[0].cacheTTL == nil)
+
+        reducer.apply(.assistantTurn(turn(
+            at: base.addingTimeInterval(10 * 60),
+            read: 0,
+            write: 201_000
+        )))
+        let session = reducer.snapshot.sessions[0]
+        #expect(session.lastCacheMissAt == nil)
+        #expect(session.cacheSummary?.fullWarmMisses == 0)
     }
 
     @Test
