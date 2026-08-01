@@ -69,7 +69,9 @@ public enum Pricing {
     /// Full API-price cost of one turn. Output is 5x base input across the current
     /// lineup; cache reads 0.1x; writes 1.25x (5m) / 2x (1h).
     public static func turnCostUSD(model: String, usage: TurnUsage, at timestamp: Date) -> Double? {
-        guard let rate = baseInputRate(model: model, at: timestamp) else { return nil }
+        guard usage.isCompleteForCacheSummary,
+              let rate = baseInputRate(model: model, at: timestamp)
+        else { return nil }
         let write = Double(usage.ephemeral1hTokens) * 2.0
             + Double(usage.ephemeral5mTokens) * 1.25
             + Double(usage.cacheCreationInputTokens - usage.ephemeral1hTokens - usage.ephemeral5mTokens) * 1.25

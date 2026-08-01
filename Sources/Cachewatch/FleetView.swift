@@ -410,6 +410,7 @@ private struct SessionRow: View {
     let fleet: FleetSnapshot
     @State private var confirmingClose = false
     @State private var hovering = false
+    @State private var cacheInsightsExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -497,6 +498,9 @@ private struct SessionRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .monospacedDigit()
+            if let summary = session.cacheSummary {
+                cacheEfficiencyDisclosure(summary)
+            }
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
@@ -547,6 +551,149 @@ private struct SessionRow: View {
             return source.affectedMetrics
         }
         return "\(source.affectedMetrics) are \(qualifier). Open Data sources for details."
+    }
+
+    private func cacheEfficiencyDisclosure(_ summary: SessionCacheSummary) -> some View {
+        DisclosureGroup(isExpanded: $cacheInsightsExpanded) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mainEvidence(summary))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                if summary.main.evidenceQuality == .sufficient,
+                   summary.main.cacheWriteTokens > 0 {
+                    Text(
+                        "Writes · \(Format.tokens(summary.main.fiveMinuteWriteTokens)) at 5m"
+                        + " · \(Format.tokens(summary.main.oneHourWriteTokens)) at 1h"
+                        + (summary.main.unclassifiedWriteTokens > 0
+                            ? " · \(Format.tokens(summary.main.unclassifiedWriteTokens)) TTL unknown"
+                            : "")
+                    )
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+                }
+                if summary.sidechains.assistantTurns > 0 {
+                    Text(sidechainEvidence(summary.sidechains))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Text(interpretation(summary))
+                    .foregroundStyle(interpretationColor(summary.interpretation))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(interpretation(summary))
+            }
+            .font(.caption2)
+            .padding(.top, 4)
+        } label: {
+            HStack {
+                Text("Cache efficiency")
+                Spacer()
+                Text(cacheHeadline(summary))
+                    .foregroundStyle(headlineColor(summary.interpretation))
+                    .monospacedDigit()
+            }
+            .font(.caption)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Cache efficiency, \(cacheHeadline(summary))")
+        }
+        .help("Launch-replayed token counters only. No prompts or transcript content are retained.")
+    }
+
+    private func cacheHeadline(_ summary: SessionCacheSummary) -> String {
+        switch summary.interpretation {
+        case .insufficientEvidence: return "learning"
+        case .incompleteData: return "partial data"
+        case .warmMissObserved: return "\(summary.fullWarmMisses) warm miss\(summary.fullWarmMisses == 1 ? "" : "es")"
+        case .awaitingLargeWriteReuse: return "awaiting reuse"
+        case .largeWriteTTLUnknown: return "write TTL unknown"
+        case .largeWriteNotReused: return "write not reused"
+        case .strongReuse: return ratioText(summary.main.cacheEligibleHitRatio)
+        case .limitedReuse: return "\(ratioText(summary.main.cacheEligibleHitRatio)) · limited"
+        case .neutral: return ratioText(summary.main.cacheEligibleHitRatio)
+        }
+    }
+
+    private func mainEvidence(_ summary: SessionCacheSummary) -> String {
+        let activity = summary.main
+        switch activity.evidenceQuality {
+        case .insufficient:
+            return "Main chain · \(turnText(activity.assistantTurns)) · need at least 2 complete turns"
+        case .incomplete:
+            return "Main chain · \(activity.turnsWithCompleteUsage) of \(activity.assistantTurns) turns have complete usage"
+        case .sufficient:
+            let ratio = ratioText(activity.cacheEligibleHitRatio)
+            return "Main chain · \(ratio) reuse · \(Format.tokens(activity.cacheReadTokens)) read · \(Format.tokens(activity.cacheWriteTokens)) written · \(turnText(activity.assistantTurns))"
+        }
+    }
+
+    private func sidechainEvidence(_ activity: CacheActivitySummary) -> String {
+        switch activity.evidenceQuality {
+        case .insufficient:
+            return "Subagents · \(turnText(activity.assistantTurns)) · not enough evidence"
+        case .incomplete:
+            return "Subagents · \(activity.turnsWithCompleteUsage) of \(activity.assistantTurns) turns have complete usage"
+        case .sufficient:
+            return "Subagents · \(ratioText(activity.cacheEligibleHitRatio)) reuse · \(Format.tokens(activity.cacheReadTokens)) read · \(Format.tokens(activity.cacheWriteTokens)) written · \(turnText(activity.assistantTurns))"
+        }
+    }
+
+    private func interpretation(_ summary: SessionCacheSummary) -> String {
+        switch summary.interpretation {
+        case .insufficientEvidence:
+            return "No action yet. Need 2 complete main-chain turns."
+        case .incompleteData:
+            return "No ratio: \(summary.main.incompleteUsageTurns) turn\(summary.main.incompleteUsageTurns == 1 ? " has" : "s have") incomplete usage."
+        case .warmMissObserved:
+            return "\(summary.fullWarmMisses) warm full rewrite\(summary.fullWarmMisses == 1 ? "" : "s"). Check model, system prompt, tools, and resume changes."
+        case .awaitingLargeWriteReuse:
+            return "Latest \(Format.tokens(summary.lastLargeWriteTokens)) write has no later complete turn. Wait before judging."
+        case .largeWriteTTLUnknown:
+            return "Latest \(Format.tokens(summary.lastLargeWriteTokens)) write has no TTL bucket. Reuse cannot be attributed safely."
+        case .largeWriteNotReused:
+            if summary.lastLargeWriteExpired,
+               summary.turnsAfterLastLargeWrite == 0 {
+                return "Latest \(Format.tokens(summary.lastLargeWriteTokens)) write expired before substantial reuse appeared. Future turns cannot prove reuse for that write."
+            }
+            return "Latest \(Format.tokens(summary.lastLargeWriteTokens)) write had \(turnText(summary.turnsAfterLastLargeWrite)) and no substantial read. Check model, prompt, tools, or session identity."
+        case .strongReuse:
+            let timing: String
+            if case .warm(let expiresAt) = session.cacheState(at: now) {
+                timing = " Return within \(Format.countdown(expiresAt.timeIntervalSince(now)))."
+            } else {
+                timing = ""
+            }
+            return "\(ratioText(summary.main.cacheEligibleHitRatio)) reuse over \(turnText(summary.main.assistantTurns)). Stay here.\(timing)"
+        case .limitedReuse:
+            return "Only \(ratioText(summary.main.cacheEligibleHitRatio)) reuse across \(turnText(summary.main.assistantTurns)). If work continues, keep model, prompt, and tools stable."
+        case .neutral:
+            return "Mixed reuse across \(turnText(summary.main.assistantTurns)). No clear action yet."
+        }
+    }
+
+    private func ratioText(_ ratio: Double?) -> String {
+        guard let ratio else { return "no cache activity" }
+        return "\(Int((ratio * 100).rounded()))%"
+    }
+
+    private func turnText(_ count: Int) -> String {
+        "\(count) turn\(count == 1 ? "" : "s")"
+    }
+
+    private func headlineColor(_ interpretation: CacheInterpretation) -> Color {
+        switch interpretation {
+        case .strongReuse: .green
+        case .warmMissObserved, .largeWriteNotReused, .limitedReuse: .orange
+        case .insufficientEvidence, .incompleteData, .awaitingLargeWriteReuse,
+             .largeWriteTTLUnknown, .neutral: .secondary
+        }
+    }
+
+    private func interpretationColor(_ interpretation: CacheInterpretation) -> Color {
+        switch interpretation {
+        case .warmMissObserved, .largeWriteNotReused, .limitedReuse: .orange
+        case .strongReuse: .green
+        case .insufficientEvidence, .incompleteData, .awaitingLargeWriteReuse,
+             .largeWriteTTLUnknown, .neutral: .secondary
+        }
     }
 
     private var statusColor: Color {

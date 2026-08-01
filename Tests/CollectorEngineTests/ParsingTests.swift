@@ -79,6 +79,110 @@ struct ParsingTests {
     }
 
     @Test
+    func partialUsageIsMarkedIncompleteForCacheSummary() throws {
+        let line = """
+        {"type":"assistant","sessionId":"s","timestamp":"2026-07-19T18:00:00.000Z","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":5,"output_tokens":1}}}
+        """
+
+        let turn = try #require(TranscriptParser.assistantTurns(from: Data(line.utf8)).first)
+        let usage = try #require(turn.usage)
+        #expect(usage.isCompleteForCacheSummary == false)
+    }
+
+    @Test
+    func malformedUsageIsMarkedIncompleteForCacheSummary() throws {
+        let lines = [
+            """
+            {"type":"assistant","sessionId":"s1","timestamp":"2026-07-20T10:00:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":-1,"output_tokens":20,"cache_read_input_tokens":30,"cache_creation_input_tokens":0}}}
+            """,
+            """
+            {"type":"assistant","sessionId":"s1","timestamp":"2026-07-20T10:01:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":30,"cache_creation_input_tokens":100,"cache_creation":{"ephemeral_5m_input_tokens":60,"ephemeral_1h_input_tokens":20}}}}
+            """,
+        ]
+
+        for line in lines {
+            let turn = try #require(TranscriptParser.assistantTurns(from: Data(line.utf8)).first)
+            #expect(turn.usage?.isCompleteForCacheSummary == false)
+        }
+    }
+
+    @Test
+    func wrongTypedAndOverflowingUsageRemainIncompleteAssistantEvents() throws {
+        let malformedUsageObjects = [
+            #"{"input_tokens":"10","output_tokens":20,"cache_read_input_tokens":30,"cache_creation_input_tokens":0}"#,
+            #"{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":9223372036854775808,"cache_creation_input_tokens":0}"#,
+            #"{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":30,"cache_creation_input_tokens":100,"cache_creation":"invalid"}"#,
+        ]
+
+        for (index, usageObject) in malformedUsageObjects.enumerated() {
+            let line = """
+            {"type":"assistant","sessionId":"s\(index)","timestamp":"2026-07-20T10:0\(index):00Z","message":{"model":"claude-opus-4-8","usage":\(usageObject)}}
+            """
+            let turn = try #require(TranscriptParser.assistantTurns(from: Data(line.utf8)).first)
+            let usage = try #require(turn.usage)
+            #expect(usage.isCompleteForCacheSummary == false)
+        }
+    }
+
+    @Test
+    func wrongTypedUsageContainerRemainsAssistantEventWithoutUsage() throws {
+        let line = """
+        {"type":"assistant","sessionId":"s","timestamp":"2026-07-20T10:00:00Z","message":{"model":"claude-opus-4-8","usage":"invalid"}}
+        """
+
+        let turn = try #require(TranscriptParser.assistantTurns(from: Data(line.utf8)).first)
+        #expect(turn.usage == nil)
+    }
+
+    @Test
+    func wrongTypedMessageContainerRemainsAssistantEventWithoutUsage() throws {
+        let line = """
+        {"type":"assistant","sessionId":"s","timestamp":"2026-07-20T10:00:00Z","message":"invalid"}
+        """
+
+        let turn = try #require(TranscriptParser.assistantTurns(from: Data(line.utf8)).first)
+        #expect(turn.usage == nil)
+        #expect(turn.model == nil)
+    }
+
+    @Test
+    func wrongTypedSidechainIdentityRemainsAssistantBarrierWithoutUsage() throws {
+        let line = #"{"type":"assistant","sessionId":"s","timestamp":"2026-07-19T18:00:00.000Z","isSidechain":"false","message":{"model":"m","usage":{"input_tokens":5,"output_tokens":1,"cache_read_input_tokens":10,"cache_creation_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0}}}}"#
+
+        guard case .assistant(let turn) = TranscriptParser.classify(line: line) else {
+            Issue.record("Expected malformed sidechain metadata to preserve an assistant barrier")
+            return
+        }
+        #expect(turn.isSidechain == false)
+        #expect(turn.usage == nil)
+    }
+
+    @Test
+    func writeWithoutTTLBucketsIsMeasuredButUnclassified() throws {
+        let line = """
+        {"type":"assistant","sessionId":"s","timestamp":"2026-07-20T10:00:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":100000,"cache_creation_input_tokens":60000}}}
+        """
+
+        let turn = try #require(TranscriptParser.assistantTurns(from: Data(line.utf8)).first)
+        let usage = try #require(turn.usage)
+        #expect(usage.isCompleteForCacheSummary)
+        #expect(usage.cacheCreationInputTokens == 60_000)
+        #expect(usage.unclassifiedCacheCreationTokens == 60_000)
+        #expect(usage.cacheTTL == nil)
+    }
+
+    @Test
+    func mixedTTLBucketsUseTheShortestTTL() throws {
+        let line = """
+        {"type":"assistant","sessionId":"s","timestamp":"2026-07-20T10:00:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":100000,"cache_creation_input_tokens":60000,"cache_creation":{"ephemeral_5m_input_tokens":30000,"ephemeral_1h_input_tokens":30000}}}}
+        """
+
+        let turn = try #require(TranscriptParser.assistantTurns(from: Data(line.utf8)).first)
+        let usage = try #require(turn.usage)
+        #expect(usage.cacheTTL == .fiveMinutes)
+    }
+
+    @Test
     func turnWithoutCacheWriteHasNoTTL() throws {
         let line = """
         {"type":"assistant","sessionId":"s","timestamp":"2026-07-19T18:00:00.000Z","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":100,"output_tokens":1,"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0}}}}
