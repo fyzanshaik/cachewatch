@@ -4,7 +4,7 @@ import CollectorEngine
 
 /// End-to-end: statusline JSON piped through the real forwarder script over the
 /// real unix socket into StatuslineListener. Guards against nc/EOF deadlocks.
-@Suite
+@Suite(.serialized)
 struct IntegrationTests {
     @Test
     func forwarderScriptDeliversPayloadToListener() throws {
@@ -14,19 +14,26 @@ struct IntegrationTests {
         let fixturePath = fixtureURL("statusline-plan.json").path
         let sock = FileManager.default.temporaryDirectory.appending(path: "cw-\(UUID().uuidString.prefix(8)).sock").path
 
+        let listening = DispatchSemaphore(value: 0)
         let received = DispatchSemaphore(value: 0)
         let exited = DispatchSemaphore(value: 0)
         nonisolated(unsafe) var payload: StatuslinePayload?
         Task.detached {
-            for await p in StatuslineListener.payloads(socketPath: sock) {
-                payload = p
-                received.signal()
-                break
+            eventLoop: for await event in StatuslineListener.events(socketPath: sock) {
+                switch event {
+                case .listening:
+                    listening.signal()
+                case .payload(let value):
+                    payload = value
+                    received.signal()
+                    break eventLoop
+                case .rejectedPayload, .failed:
+                    break
+                }
             }
             exited.signal()
         }
-        // Give the listener thread a moment to bind before forwarding.
-        Thread.sleep(forTimeInterval: 0.3)
+        #expect(listening.wait(timeout: .now() + 5) == .success)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
