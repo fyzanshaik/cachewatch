@@ -4,7 +4,6 @@ import CollectorEngine
 struct FleetView: View {
     let model: FleetModel
     @State private var showingSourceHealth = false
-    @State private var showingAlertSettings = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -62,7 +61,7 @@ struct FleetView: View {
                         .foregroundStyle(.tertiary)
                         .font(.caption)
                     Button("Alert settings", systemImage: "gearshape") {
-                        showingAlertSettings = true
+                        model.showAlertSettings()
                     }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
@@ -76,11 +75,6 @@ struct FleetView: View {
             }
             .padding(14)
             .frame(width: 470)
-            .sheet(isPresented: $showingAlertSettings) {
-                AlertSettingsView(config: model.alertCenter.alertConfig) { config in
-                    model.alertCenter.updateAlertConfig(config)
-                }
-            }
         }
     }
 

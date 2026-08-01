@@ -2,13 +2,18 @@ import SwiftUI
 import CollectorEngine
 
 struct AlertSettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var config: AlertConfig
     let onSave: (AlertConfig) -> Void
+    let onDismiss: () -> Void
 
-    init(config: AlertConfig, onSave: @escaping (AlertConfig) -> Void) {
+    init(
+        config: AlertConfig,
+        onSave: @escaping (AlertConfig) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
         _config = State(initialValue: config)
         self.onSave = onSave
+        self.onDismiss = onDismiss
     }
 
     var body: some View {
@@ -48,11 +53,11 @@ struct AlertSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                 Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Cancel", role: .cancel) { onDismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Save") {
                     onSave(config)
-                    dismiss()
+                    onDismiss()
                 }
                 .keyboardShortcut(.defaultAction)
             }

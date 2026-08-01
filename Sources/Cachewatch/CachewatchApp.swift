@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import CollectorEngine
 
@@ -59,6 +60,14 @@ struct CachewatchApp: App {
             }
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    model.showAlertSettings()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
+        }
     }
 }
 
@@ -72,6 +81,7 @@ final class FleetModel {
     private let collector: Collector
     let alertCenter = AlertCenter()
     private let notchSurface = NotchSurface()
+    private let settingsWindowController = AlertSettingsWindowController()
 
     init() {
         collector = Collector(
@@ -98,5 +108,43 @@ final class FleetModel {
             }
             self.notchSurface.hudEnabled = self.alertCenter.notchHUDEnabled
         }
+    }
+
+    func showAlertSettings() {
+        settingsWindowController.show(config: alertCenter.alertConfig) { [alertCenter] config in
+            alertCenter.updateAlertConfig(config)
+        }
+    }
+}
+
+@MainActor
+private final class AlertSettingsWindowController {
+    private var window: NSWindow?
+
+    func show(config: AlertConfig, onSave: @escaping (AlertConfig) -> Void) {
+        let window = window ?? makeWindow()
+        window.contentView = NSHostingView(rootView: AlertSettingsView(
+            config: config,
+            onSave: onSave,
+            onDismiss: { [weak self] in self?.window?.close() }
+        ))
+        self.window = window
+
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func makeWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Alert settings"
+        window.level = .normal
+        window.isReleasedWhenClosed = false
+        window.center()
+        return window
     }
 }
